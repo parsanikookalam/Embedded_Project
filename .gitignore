@@ -1,0 +1,15 @@
+# Compiled C files and objects
+*.o
+*.out
+web_server
+
+# Python cache
+__pycache__/
+*.pyc
+
+# SQLite database files
+*.db
+*.sqlite
+
+# SSL Keys (optional: keep private key out if repo is public)
+# web/server.key
