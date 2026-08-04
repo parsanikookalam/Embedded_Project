@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title id="page-title">Smart Guard System</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #121212; color: #fff; text-align: center; margin: 0; padding: 20px; }
+        h1 { color: #00e676; }
+        .card-container { display: flex; justify-content: center; gap: 20px; margin: 20px 0; flex-wrap: wrap; }
+        .card { background: #1e1e1e; padding: 20px; border-radius: 8px; min-width: 150px; border: 1px solid #333; }
+        .card h3 { margin: 0 0 10px 0; font-size: 14px; color: #aaa; }
+        .card p { margin: 0; font-size: 24px; font-weight: bold; color: #00e676; }
+        .stream-box { background: #000; display: inline-block; padding: 10px; border-radius: 8px; margin-bottom: 20px; }
+        img { width: 640px; height: 480px; background: #222; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>Smart Guard System</h1>
+    <h2 id="student-header">Loading student info...</h2>
+
+    <div class="stream-box">
+        <h3>Live Camera Stream</h3>
+        <img src="/api/v1/stream" alt="Live Stream Processing...">
+    </div>
+
+    <div class="card-container">
+        <div class="card">
+            <h3>Persons Detected</h3>
+            <p id="person-count">0</p>
+        </div>
+        <div class="card">
+            <h3>CPU Temp</h3>
+            <p id="cpu-temp">0 °C</p>
+        </div>
+        <div class="card">
+            <h3>Free Memory</h3>
+            <p id="free-mem">0 KB</p>
+        </div>
+        <div class="card">
+            <h3>CPU Usage</h3>
+            <p id="cpu-usage">0 %</p>
+        </div>
+    </div>
+
+    <script>
+        // Fetch environment config once on page load to populate name and ID dynamically
+        fetch('/api/v1/config')
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('page-title').innerText = 'Smart Guard System - ' + data.name + ' - ' + data.id;
+                document.getElementById('student-header').innerText = data.name + ' | Student ID: ' + data.id;
+            })
+            .catch(err => console.error('Error loading config:', err));
+
+        // Fetch system metrics and camera detection counts periodically
+        function updateTelemetry() {
+            fetch('/api/v1/telemetry')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('cpu-temp').innerText = data.cpu_temp.toFixed(1) + ' °C';
+                    document.getElementById('free-mem').innerText = data.free_mem_kb + ' KB';
+                    document.getElementById('cpu-usage').innerText = data.cpu_usage_percent.toFixed(1) + ' %';
+                })
+                .catch(err => console.error('Error loading telemetry:', err));
+
+            fetch('/api/v1/persons')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('person-count').innerText = data.count;
+                })
+                .catch(err => console.error('Error loading persons:', err));
+        }
+
+        // Auto update every 2 seconds
+        setInterval(updateTelemetry, 2000);
+        updateTelemetry();
+    </script>
+</body>
+</html>
