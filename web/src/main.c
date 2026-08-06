@@ -1,7 +1,12 @@
 #include "http_server.h"
+#include "email_alert.h"
+#include "mqtt_pub.h"
+#include "features_part4.h"
 
 int main(void) {
-    // Start the server on port 8080 (we will add port 443 SSL handling in section b)
-    start_http_server(8080);
+    email_alert_start();
+    mqtt_pub_start();
+    part4_start();
+    start_http_server(0);
     return 0;
 }

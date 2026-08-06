@@ -1,0 +1,7 @@
+# Smart Guard Part 3C — project-local Mosquitto (runs as your user)
+persistence false
+log_dest stderr
+connection_messages true
+allow_anonymous false
+password_file PASSWD_PATH_PLACEHOLDER
+listener 1883 127.0.0.1

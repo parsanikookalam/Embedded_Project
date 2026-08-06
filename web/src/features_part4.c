@@ -1,0 +1,239 @@
+/*
+ * Part 4 — Anti-theft / Smart Guard features:
+ *  1) Guard mode (when ARMED): person edge → email+photo + MQTT home/<id>/alarm
+ *  2) Software watchdog (when ENABLED): no new frame >30s while capturing
+ *     → "camera tampering" email + systemctl restart human_detector
+ *  3) Adaptive thermal (when ENABLED): CPU ≥ threshold → cut YOLO res/FPS + email
+ */
+
+#include "features_part4.h"
+#include "email_alert.h"
+#include "feature_flags.h"
+#include "guard_state.h"
+#include "mqtt_pub.h"
+#include "persons_state.h"
+#include "telemetry.h"
+
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <unistd.h>
+
+#define CFG_PATH "../config.env"
+#define HEARTBEAT_PATH "../data/vision_heartbeat.json"
+#define THERMAL_CTRL_PATH "../data/thermal_control.json"
+
+static float g_thermal_on = 85.0f;
+static float g_thermal_off = 78.0f;
+static int g_watchdog_sec = 30;
+
+static void trim_crlf(char *s)
+{
+    size_t n = strlen(s);
+    while (n > 0 && (s[n - 1] == '\n' || s[n - 1] == '\r' || s[n - 1] == ' '))
+        s[--n] = '\0';
+}
+
+static void load_part4_cfg(void)
+{
+    FILE *fp = fopen(CFG_PATH, "r");
+    char line[256];
+    if (!fp)
+        return;
+    while (fgets(line, sizeof(line), fp)) {
+        trim_crlf(line);
+        if (strncmp(line, "THERMAL_TEMP_C=", 15) == 0)
+            g_thermal_on = (float)atof(line + 15);
+        else if (strncmp(line, "THERMAL_CLEAR_C=", 16) == 0)
+            g_thermal_off = (float)atof(line + 16);
+        else if (strncmp(line, "WATCHDOG_SEC=", 13) == 0)
+            g_watchdog_sec = atoi(line + 13);
+    }
+    fclose(fp);
+    if (g_watchdog_sec < 10)
+        g_watchdog_sec = 10;
+}
+
+static void write_thermal_control(int level, float temp)
+{
+    FILE *fp = fopen(THERMAL_CTRL_PATH ".tmp", "w");
+    int yolo = 640;
+    int sleep_ms = 0;
+    if (level >= 2) {
+        yolo = 320;
+        sleep_ms = 25;
+    } else if (level == 1) {
+        yolo = 416;
+        sleep_ms = 10;
+    }
+    if (!fp)
+        return;
+    fprintf(fp,
+            "{\"throttle_level\":%d,\"cpu_temp\":%.2f,\"yolo_input\":%d,\"frame_sleep_ms\":%d}\n",
+            level, temp, yolo, sleep_ms);
+    fclose(fp);
+    if (rename(THERMAL_CTRL_PATH ".tmp", THERMAL_CTRL_PATH) != 0) {
+        fp = fopen(THERMAL_CTRL_PATH, "w");
+        if (!fp)
+            return;
+        fprintf(fp,
+                "{\"throttle_level\":%d,\"cpu_temp\":%.2f,\"yolo_input\":%d,\"frame_sleep_ms\":%d}\n",
+                level, temp, yolo, sleep_ms);
+        fclose(fp);
+    }
+}
+
+static int read_heartbeat(long *ts_out, char *mode_out, size_t mode_sz)
+{
+    FILE *fp = fopen(HEARTBEAT_PATH, "r");
+    char buf[256] = {0};
+    char *p;
+    long ts = 0;
+    if (!fp)
+        return -1;
+    if (fread(buf, 1, sizeof(buf) - 1, fp) == 0) {
+        fclose(fp);
+        return -1;
+    }
+    fclose(fp);
+    p = strstr(buf, "\"ts\"");
+    if (p)
+        sscanf(p, "\"ts\"%*[^0-9-]%ld", &ts);
+    if (mode_out && mode_sz) {
+        mode_out[0] = '\0';
+        p = strstr(buf, "\"mode\"");
+        if (p) {
+            char tmp[32] = {0};
+            if (sscanf(p, "\"mode\"%*[^\"]\"%31[^\"]\"", tmp) == 1)
+                snprintf(mode_out, mode_sz, "%s", tmp);
+        }
+    }
+    if (ts_out)
+        *ts_out = ts;
+    return ts > 0 ? 0 : -1;
+}
+
+static void *part4_thread(void *arg)
+{
+    int prev_count = 0;
+    int throttle_level = 0;
+    time_t last_guard_mail = 0;
+    time_t last_watch_mail = 0;
+    time_t last_thermal_mail = 0;
+    time_t last_thermal_write = 0;
+    (void)arg;
+
+    load_part4_cfg();
+    write_thermal_control(0, 0);
+    printf("[part4] guard/watchdog/thermal coordinator up (thermal>=%.0fC wd=%ds)\n",
+           g_thermal_on, g_watchdog_sec);
+
+    while (1) {
+        PersonSnapshot snap;
+        SystemTelemetry tel;
+        float temp = -1.0f;
+        long now = (long)time(NULL);
+        int count = 0;
+        long hb_ts = 0;
+        char mode[32] = {0};
+        static int ticks = 0;
+
+        if ((ticks++ % 30) == 0)
+            load_part4_cfg();
+
+        if (read_persons_snapshot(&snap) == 0)
+            count = snap.count;
+        if (get_system_telemetry(&tel) == 0)
+            temp = tel.cpu_temp;
+
+        /* ---- 4.1 Guard / anti-theft ---- */
+        if (guard_is_armed() && count >= 1 && prev_count == 0) {
+            if (now - last_guard_mail >= 5) {
+                char body[512];
+                snprintf(body, sizeof(body),
+                         "GUARD ALARM (anti-theft)\nPersons detected: %d\nCPU temp: %.2f C\n"
+                         "Timestamp: %ld\nMQTT: home/<student_id>/alarm\n",
+                         count, temp, now);
+                email_send_event("[Smart Guard] GUARD ALARM — person detected", body, 1);
+                mqtt_publish_alarm(count, temp, now);
+                last_guard_mail = now;
+                printf("[part4] GUARD alarm fired count=%d\n", count);
+            }
+        }
+        prev_count = count;
+
+        /* ---- 4.3 Software watchdog ---- */
+        if (watchdog_is_enabled() && read_heartbeat(&hb_ts, mode, sizeof(mode)) == 0) {
+            long age = (hb_ts > 0) ? (now - hb_ts) : 0;
+            /* Only while detector claims capturing (camera ON and streaming frames) */
+            if (strcmp(mode, "capturing") == 0 && hb_ts > 0 && age > g_watchdog_sec &&
+                age < 3600) {
+                if (now - last_watch_mail >= 60) {
+                    char body[640];
+                    snprintf(body, sizeof(body),
+                             "WARNING — camera tampering / no frames\n"
+                             "Image processing sent no new frame for >%d seconds while "
+                             "capturing.\nLast heartbeat ts=%ld age=%lds\n"
+                             "Restarting human_detector service.\n",
+                             g_watchdog_sec, hb_ts, age);
+                    email_send_event("[Smart Guard] WARNING — camera tampering", body, 0);
+                    last_watch_mail = now;
+                    {
+                        int rc = system("systemctl restart human_detector >/dev/null 2>&1");
+                        printf("[part4] watchdog restart human_detector rc=%d age=%ld\n", rc,
+                               age);
+                    }
+                }
+            }
+        }
+
+        /* ---- 4.4 Adaptive thermal ---- */
+        if (thermal_is_enabled() && temp > 0) {
+            int want = throttle_level;
+            if (temp >= g_thermal_on)
+                want = (temp >= g_thermal_on + 8.0f) ? 2 : 1;
+            else if (temp <= g_thermal_off)
+                want = 0;
+
+            if (want != throttle_level) {
+                throttle_level = want;
+                write_thermal_control(throttle_level, temp);
+                last_thermal_write = now;
+                printf("[part4] thermal level=%d temp=%.1f\n", throttle_level, temp);
+                if (throttle_level > 0 && now - last_thermal_mail >= 60) {
+                    char body[512];
+                    snprintf(body, sizeof(body),
+                             "Adaptive thermal management\nCPU temp=%.2f C (threshold %.0f C).\n"
+                             "Throttle level=%d — reduced resolution / FPS.\n",
+                             temp, g_thermal_on, throttle_level);
+                    email_send_event("[Smart Guard] Thermal throttle active", body, 0);
+                    last_thermal_mail = now;
+                }
+            } else if (now - last_thermal_write >= 15) {
+                write_thermal_control(throttle_level, temp);
+                last_thermal_write = now;
+            }
+        } else if (!thermal_is_enabled() && throttle_level != 0) {
+            throttle_level = 0;
+            write_thermal_control(0, temp > 0 ? temp : 0);
+            last_thermal_write = now;
+            printf("[part4] thermal disabled → throttle cleared\n");
+        }
+
+        sleep(2);
+    }
+    return NULL;
+}
+
+void part4_start(void)
+{
+    pthread_t th;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    if (pthread_create(&th, &attr, part4_thread, NULL) != 0)
+        fprintf(stderr, "[part4] failed to start thread\n");
+    pthread_attr_destroy(&attr);
+}

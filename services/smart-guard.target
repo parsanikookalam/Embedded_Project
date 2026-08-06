@@ -1,0 +1,7 @@
+[Unit]
+Description=Smart Guard stack (detector + web + swagger)
+Wants=human_detector.service web_server.service api_gateway.service
+After=human_detector.service web_server.service api_gateway.service
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,7 @@
+opencv-contrib-python-headless>=5.0.0; python_version >= "3.14"
+opencv-python-headless>=4.8.0,<5; python_version < "3.14"
+python-dotenv>=1.0.0
+paho-mqtt>=2.0.0
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+numpy>=1.24.0

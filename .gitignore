@@ -1,15 +1,25 @@
-# Compiled C files and objects
+# Build
 *.o
 *.out
-web_server
+web/web_server
 
-# Python cache
+# Python
 __pycache__/
 *.pyc
+.venv/
+venv/
 
-# SQLite database files
-*.db
-*.sqlite
+# Runtime
+data/history.db
+data/*.tmp
+data/reboot_requested
+data/verify_part12.txt
+detection/models/*.caffemodel
+mqtt/passwd
+mqtt/mosquitto.conf
 
-# SSL Keys (optional: keep private key out if repo is public)
-# web/server.key
+# TLS private key
+web/www/server.key
+
+# Local secrets (keep example template)
+# config.env   # uncomment if you do not want secrets in zip for TAs

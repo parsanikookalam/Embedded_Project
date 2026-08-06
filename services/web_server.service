@@ -1,0 +1,25 @@
+[Unit]
+Description=Smart Guard C Web Server (HTTP redirect + HTTPS REST)
+After=network.target human_detector.service mosquitto_smartguard.service
+Wants=network.target
+Wants=human_detector.service
+Wants=mosquitto_smartguard.service
+
+[Service]
+Type=simple
+User=parsa
+Group=parsa
+WorkingDirectory=/home/parsa/embedded_project/web
+EnvironmentFile=/home/parsa/embedded_project/config.env
+# Windows PowerShell must be reachable for WSL host CPU temp
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/mnt/c/Windows/System32:/mnt/c/Windows/System32/WindowsPowerShell/v1.0
+Environment="HOST_CPU_TEMP_CMD=/bin/bash /home/parsa/embedded_project/scripts/host_cpu_temp.sh"
+ExecStartPre=/bin/bash -c 'test -x /home/parsa/embedded_project/web/web_server'
+ExecStart=/home/parsa/embedded_project/web/web_server
+Restart=always
+RestartSec=3
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target
+WantedBy=smart-guard.target

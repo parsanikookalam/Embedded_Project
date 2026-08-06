@@ -1,79 +1,331 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title id="page-title">Smart Guard System</title>
-    <style>
-        body { font-family: Arial, sans-serif; background: #121212; color: #fff; text-align: center; margin: 0; padding: 20px; }
-        h1 { color: #00e676; }
-        .card-container { display: flex; justify-content: center; gap: 20px; margin: 20px 0; flex-wrap: wrap; }
-        .card { background: #1e1e1e; padding: 20px; border-radius: 8px; min-width: 150px; border: 1px solid #333; }
-        .card h3 { margin: 0 0 10px 0; font-size: 14px; color: #aaa; }
-        .card p { margin: 0; font-size: 24px; font-weight: bold; color: #00e676; }
-        .stream-box { background: #000; display: inline-block; padding: 10px; border-radius: 8px; margin-bottom: 20px; }
-        img { width: 640px; height: 480px; background: #222; border-radius: 4px; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title id="page-title">Smart Guard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg0: #0b1014;
+      --bg1: #121a21;
+      --panel: #162029;
+      --line: #2a3a48;
+      --text: #e8eef3;
+      --muted: #8aa0b2;
+      --accent: #3ecf8e;
+      --warn: #e8a54b;
+      --danger: #ef5b5b;
+      --font: "Outfit", system-ui, sans-serif;
+      --mono: "IBM Plex Mono", ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      color: var(--text);
+      background:
+        radial-gradient(1200px 600px at 10% -10%, #1a3230 0%, transparent 55%),
+        radial-gradient(900px 500px at 100% 0%, #243044 0%, transparent 50%),
+        var(--bg0);
+    }
+    .wrap {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 28px 20px 48px;
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 28px;
+      animation: rise 0.6s ease both;
+    }
+    .brand {
+      font-size: clamp(1.8rem, 4vw, 2.6rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin: 0;
+      line-height: 1.1;
+    }
+    .brand span { color: var(--accent); }
+    .sub {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 0.85rem;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+    .panel {
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent), var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+      animation: rise 0.7s ease both;
+    }
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .stream-frame {
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid #000;
+      aspect-ratio: 4/3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .stream-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      background: #111;
+    }
+    .stream-meta {
+      margin-top: 10px;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+    .controls { display: flex; flex-direction: column; gap: 12px; }
+    .toggle {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px 12px;
+      align-items: center;
+      padding: 14px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: var(--bg1);
+      transition: border-color 0.25s, box-shadow 0.25s;
+    }
+    .toggle.on { border-color: rgba(62, 207, 142, 0.55); box-shadow: inset 0 0 0 1px rgba(62,207,142,0.15); }
+    .toggle.danger.on { border-color: rgba(239, 91, 91, 0.6); box-shadow: inset 0 0 0 1px rgba(239,91,91,0.15); }
+    .toggle h3 { margin: 0; font-size: 1.05rem; font-weight: 600; }
+    .toggle p { margin: 0; grid-column: 1 / -1; color: var(--muted); font-size: 0.82rem; line-height: 1.35; }
+    .state {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--muted);
+    }
+    .toggle.on .state { color: var(--accent); }
+    .toggle.danger.on .state { color: var(--danger); }
+    .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+    button {
+      font-family: var(--font);
+      font-weight: 600;
+      font-size: 0.85rem;
+      border: 0;
+      border-radius: 8px;
+      padding: 8px 14px;
+      cursor: pointer;
+      transition: transform 0.15s, opacity 0.15s;
+    }
+    button:hover { transform: translateY(-1px); }
+    button:active { transform: translateY(0); opacity: 0.9; }
+    .btn-on { background: var(--accent); color: #062016; }
+    .btn-off { background: #314352; color: var(--text); }
+    .btn-arm { background: var(--danger); color: #fff; }
+    .metrics {
+      margin-top: 20px;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+      animation: rise 0.8s ease both;
+    }
+    @media (max-width: 900px) {
+      .metrics { grid-template-columns: repeat(2, 1fr); }
+    }
+    .metric {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .metric .lbl { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; }
+    .metric .val {
+      margin-top: 6px;
+      font-family: var(--mono);
+      font-size: 1.25rem;
+      font-weight: 500;
+      color: var(--accent);
+    }
+    footer {
+      margin-top: 22px;
+      color: var(--muted);
+      font-size: 0.85rem;
+      animation: rise 0.9s ease both;
+    }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: none; }
+    }
+  </style>
 </head>
 <body>
-    <h1>Smart Guard System</h1>
-    <h2 id="student-header">Loading student info...</h2>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1 class="brand">Smart <span>Guard</span></h1>
+        <p class="sub" id="student-header">Loading…</p>
+      </div>
+      <p class="sub" id="deploy-hint">Part 4 · Guard · Watchdog · Thermal</p>
+    </header>
 
-    <div class="stream-box">
-        <h3>Live Camera Stream</h3>
-        <img src="/api/v1/stream" alt="Live Stream Processing...">
+    <div class="layout">
+      <section class="panel">
+        <h2>Live stream</h2>
+        <div class="stream-frame">
+          <img id="stream-img" src="/api/v1/stream" alt="Live camera stream">
+        </div>
+        <div class="stream-meta">HTTPS · <code>/api/v1/stream</code> · camera must be ON to detect</div>
+      </section>
+
+      <section class="panel controls">
+        <h2>Part 4 controls</h2>
+
+        <div class="toggle" id="box-camera">
+          <h3>Camera</h3>
+          <div class="state" id="st-camera">OFF</div>
+          <div class="btns">
+            <button class="btn-on" onclick="cmd('camera_on')">ON</button>
+            <button class="btn-off" onclick="cmd('camera_off')">OFF</button>
+          </div>
+          <p>Manual only. Stream page open does not start webcam.</p>
+        </div>
+
+        <div class="toggle danger" id="box-guard">
+          <h3>1 · Guard / Anti-theft</h3>
+          <div class="state" id="st-guard">DISARMED</div>
+          <div class="btns">
+            <button class="btn-arm" onclick="cmd('guard_on')">ARM</button>
+            <button class="btn-off" onclick="cmd('guard_off')">DISARM</button>
+          </div>
+          <p>When ARMED: any person → immediate email with photo + MQTT <code>home/&lt;id&gt;/alarm</code>.</p>
+        </div>
+
+        <div class="toggle" id="box-watchdog">
+          <h3>2 · Watchdog</h3>
+          <div class="state" id="st-watchdog">…</div>
+          <div class="btns">
+            <button class="btn-on" onclick="cmd('watchdog_on')">ENABLE</button>
+            <button class="btn-off" onclick="cmd('watchdog_off')">DISABLE</button>
+          </div>
+          <p>If capturing but no new frame &gt;30s → tampering email + restart <code>human_detector</code>.</p>
+        </div>
+
+        <div class="toggle" id="box-thermal">
+          <h3>3 · Thermal</h3>
+          <div class="state" id="st-thermal">…</div>
+          <div class="btns">
+            <button class="btn-on" onclick="cmd('thermal_on')">ENABLE</button>
+            <button class="btn-off" onclick="cmd('thermal_off')">DISABLE</button>
+          </div>
+          <p>If CPU ≥ 85°C → auto cut YOLO size/FPS and send email. Clears under 78°C.</p>
+        </div>
+      </section>
     </div>
 
-    <div class="card-container">
-        <div class="card">
-            <h3>Persons Detected</h3>
-            <p id="person-count">0</p>
-        </div>
-        <div class="card">
-            <h3>CPU Temp</h3>
-            <p id="cpu-temp">0 °C</p>
-        </div>
-        <div class="card">
-            <h3>Free Memory</h3>
-            <p id="free-mem">0 KB</p>
-        </div>
-        <div class="card">
-            <h3>CPU Usage</h3>
-            <p id="cpu-usage">0 %</p>
-        </div>
+    <div class="metrics">
+      <div class="metric"><div class="lbl">Persons</div><div class="val" id="person-count">0</div></div>
+      <div class="metric"><div class="lbl">CPU temp</div><div class="val" id="cpu-temp">—</div></div>
+      <div class="metric"><div class="lbl">Free mem</div><div class="val" id="free-mem">—</div></div>
+      <div class="metric"><div class="lbl">CPU load</div><div class="val" id="cpu-usage">—</div></div>
+      <div class="metric"><div class="lbl">Black-box</div><div class="val" id="blackbox-total">0</div></div>
     </div>
 
-    <script>
-        // Fetch environment config once on page load to populate name and ID dynamically
-        fetch('/api/v1/config')
-            .then(res => res.json())
-            .then(data => {
-                document.getElementById('page-title').innerText = 'Smart Guard System - ' + data.name + ' - ' + data.id;
-                document.getElementById('student-header').innerText = data.name + ' | Student ID: ' + data.id;
-            })
-            .catch(err => console.error('Error loading config:', err));
+    <footer id="api-hint">APIs: <code>/api/v1/part4</code> · <code>/api/v1/guard</code> · <code>/api/v1/watchdog</code> · <code>/api/v1/thermal</code> · Swagger :8000/docs</footer>
+  </div>
 
-        // Fetch system metrics and camera detection counts periodically
-        function updateTelemetry() {
-            fetch('/api/v1/telemetry')
-                .then(res => res.json())
-                .then(data => {
-                    document.getElementById('cpu-temp').innerText = data.cpu_temp.toFixed(1) + ' °C';
-                    document.getElementById('free-mem').innerText = data.free_mem_kb + ' KB';
-                    document.getElementById('cpu-usage').innerText = data.cpu_usage_percent.toFixed(1) + ' %';
-                })
-                .catch(err => console.error('Error loading telemetry:', err));
+  <script>
+    function setOn(el, on, danger) {
+      el.classList.toggle('on', !!on);
+      el.classList.toggle('danger', !!danger && !!on);
+    }
 
-            fetch('/api/v1/persons')
-                .then(res => res.json())
-                .then(data => {
-                    document.getElementById('person-count').innerText = data.count;
-                })
-                .catch(err => console.error('Error loading persons:', err));
-        }
+    function renderPart4(p) {
+      document.getElementById('st-camera').textContent = p.camera ? 'ON' : 'OFF';
+      document.getElementById('st-guard').textContent = p.guard ? 'ARMED' : 'DISARMED';
+      document.getElementById('st-watchdog').textContent = p.watchdog ? 'ENABLED' : 'DISABLED';
+      document.getElementById('st-thermal').textContent = p.thermal ? 'ENABLED' : 'DISABLED';
+      setOn(document.getElementById('box-camera'), p.camera, false);
+      setOn(document.getElementById('box-guard'), p.guard, true);
+      setOn(document.getElementById('box-watchdog'), p.watchdog, false);
+      setOn(document.getElementById('box-thermal'), p.thermal, false);
+    }
 
-        // Auto update every 2 seconds
-        setInterval(updateTelemetry, 2000);
-        updateTelemetry();
-    </script>
+    function cmd(name) {
+      fetch('/api/v1/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cmd: name })
+      })
+        .then(r => r.json())
+        .then(() => refreshPart4())
+        .catch(e => console.error(name, e));
+    }
+
+    function refreshPart4() {
+      return fetch('/api/v1/part4')
+        .then(r => r.json())
+        .then(renderPart4)
+        .catch(e => console.error('part4', e));
+    }
+
+    fetch('/api/v1/config')
+      .then(r => r.json())
+      .then(d => {
+        document.getElementById('page-title').textContent = 'Smart Guard · ' + d.name;
+        document.getElementById('student-header').textContent =
+          d.name + ' · ID ' + d.id;
+      })
+      .catch(() => {});
+
+    function tick() {
+      fetch('/api/v1/telemetry').then(r => r.json()).then(d => {
+        var t = document.getElementById('cpu-temp');
+        t.textContent = (typeof d.cpu_temp === 'number' && d.cpu_temp > 0)
+          ? d.cpu_temp.toFixed(1) + ' °C' : 'N/A';
+        document.getElementById('free-mem').textContent = d.free_mem_kb + ' KB';
+        document.getElementById('cpu-usage').textContent =
+          d.cpu_usage_percent.toFixed(1) + ' %';
+      }).catch(() => {});
+
+      fetch('/api/v1/persons').then(r => r.json()).then(d => {
+        document.getElementById('person-count').textContent = d.count;
+      }).catch(() => {});
+
+      fetch('/api/v1/blackbox').then(r => r.json()).then(d => {
+        document.getElementById('blackbox-total').textContent = d.total_human_events;
+      }).catch(() => {});
+
+      refreshPart4();
+    }
+
+    refreshPart4();
+    tick();
+    setInterval(tick, 2000);
+  </script>
 </body>
 </html>

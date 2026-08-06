@@ -1,0 +1,27 @@
+[Unit]
+Description=Smart Guard Human Detector (stream on-demand)
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=parsa
+Group=parsa
+SupplementaryGroups=video
+WorkingDirectory=/home/parsa/embedded_project/detection/src
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/home/parsa/embedded_project/config.env
+ExecStart=/home/parsa/embedded_project/.venv/bin/python /home/parsa/embedded_project/detection/src/human_detector.py
+Restart=always
+RestartSec=3
+# Start even if previous run crashed hard
+StartLimitIntervalSec=0
+# Camera open() can block; don't wait forever on stop/restart
+TimeoutStopSec=8
+KillMode=mixed
+KillSignal=SIGTERM
+FinalKillSignal=SIGKILL
+
+[Install]
+WantedBy=multi-user.target
+WantedBy=smart-guard.target

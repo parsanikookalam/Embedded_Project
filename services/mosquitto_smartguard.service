@@ -1,0 +1,17 @@
+[Unit]
+Description=Smart Guard Mosquitto broker (project-local Part 3C)
+After=network.target
+
+[Service]
+Type=simple
+User=parsa
+Group=parsa
+WorkingDirectory=/home/parsa/embedded_project/mqtt
+ExecStart=/usr/sbin/mosquitto -c /home/parsa/embedded_project/mqtt/mosquitto.conf
+Restart=always
+RestartSec=2
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target
+WantedBy=smart-guard.target
