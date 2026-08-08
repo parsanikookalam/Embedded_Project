@@ -36,8 +36,8 @@ static int g_stream_port = 5000;
 static char g_stream_host[64] = "127.0.0.1";
 static char g_target[32] = "wsl";
 
-char env_student_id[32] = "Unknown";
-char env_student_name[64] = "Unknown";
+char env_student_id[32] = "402102657";
+char env_student_name[64] = "Parsa Nikookalam";
 
 static void strip_quotes(char *s) {
     size_t n = strlen(s);

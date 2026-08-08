@@ -222,7 +222,7 @@
             <button class="btn-arm" onclick="cmd('guard_on')">ARM</button>
             <button class="btn-off" onclick="cmd('guard_off')">DISARM</button>
           </div>
-          <p>When ARMED: any person → immediate email with photo + MQTT <code>home/&lt;id&gt;/alarm</code>.</p>
+          <p>When ARMED: any person-count <b>increase</b> (0→1, 1→2, …) → fast email+photo + MQTT <code>home/402102657/alarm</code>. Part 3 still emails every ~30s while someone is present.</p>
         </div>
 
         <div class="toggle" id="box-watchdog">
@@ -232,7 +232,7 @@
             <button class="btn-on" onclick="cmd('watchdog_on')">ENABLE</button>
             <button class="btn-off" onclick="cmd('watchdog_off')">DISABLE</button>
           </div>
-          <p>If capturing but no new frame &gt;30s → tampering email + restart <code>human_detector</code>.</p>
+          <p>If Camera ON but no new frame &gt;30s → tampering email + restart <code>human_detector</code>.</p>
         </div>
 
         <div class="toggle" id="box-thermal">
@@ -242,7 +242,7 @@
             <button class="btn-on" onclick="cmd('thermal_on')">ENABLE</button>
             <button class="btn-off" onclick="cmd('thermal_off')">DISABLE</button>
           </div>
-          <p>If CPU ≥ 85°C → auto cut YOLO size/FPS and send email. Clears under 78°C.</p>
+          <p>If CPU ≥ 85°C → run YOLO less often (stream stays live) + email. Clears under 78°C.</p>
         </div>
       </section>
     </div>

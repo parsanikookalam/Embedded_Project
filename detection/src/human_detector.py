@@ -53,7 +53,7 @@ _camera_enabled = False
 _camera_lock = threading.Lock()
 
 load_dotenv(os.path.join(BASE_DIR, "config.env"))
-STUDENT_ID = os.getenv("STUDENT_ID", "Unknown ID").strip('"').strip("'")
+STUDENT_ID = os.getenv("STUDENT_ID", "402102657").strip('"').strip("'") or "402102657"
 CAMERA_INDEX = int(os.getenv("CAMERA_INDEX", "0"))
 DETECTOR_PORT = int(os.getenv("DETECTOR_PORT", "5000"))
 TARGET = os.getenv("TARGET", "wsl").strip().lower()
@@ -368,8 +368,18 @@ def append_history(count: int, ts: int, *, bump_total: bool = False) -> None:
         conn.close()
 
 
-def write_heartbeat(mode: str) -> None:
-    payload = {"ts": int(time.time()), "mode": mode}
+def write_heartbeat(mode: str, *, touch_ts: bool = True) -> None:
+    """touch_ts=False keeps previous timestamp (watchdog can detect stalled frames)."""
+    ts = int(time.time())
+    if not touch_ts:
+        try:
+            with open(HEARTBEAT_JSON, "r", encoding="utf-8") as f:
+                prev = json.load(f)
+            if isinstance(prev.get("ts"), (int, float)) and int(prev["ts"]) > 0:
+                ts = int(prev["ts"])
+        except Exception:
+            pass
+    payload = {"ts": ts, "mode": mode}
     tmp = HEARTBEAT_JSON + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(payload, f)
@@ -381,7 +391,12 @@ def read_thermal_control() -> dict:
         with open(THERMAL_CTRL_JSON, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception:
-        return {"throttle_level": 0, "yolo_input": YOLO_INPUT, "frame_sleep_ms": 0}
+        return {
+            "throttle_level": 0,
+            "yolo_input": YOLO_INPUT,
+            "detect_every": 1,
+            "frame_sleep_ms": 0,
+        }
 
 
 def _parse_enabled(data: dict) -> bool:
@@ -555,11 +570,16 @@ def detect_humans() -> None:
     last_file_check = 0.0
     enabled_cached = False
     off_streak = 0
-    OPEN_COOLDOWN_SEC = 3.0
+    OPEN_COOLDOWN_SEC = 2.0
     # Only release after MANY consecutive camera_off file reads (user pressed OFF).
     OFF_CONFIRM_READS = 6
+    frame_i = 0
+    last_dets: list = []
+    read_fail_streak = 0
+    # Recycle dead V4L2 handle after usbipd detach (Camera stays ON)
+    READ_FAILS_BEFORE_REOPEN = 8
 
-    print("[cam] service up — ON/OFF only via API. Nothing else releases the webcam.")
+    print("[cam] service up — ON/OFF only via API. Dead /dev/video* is reopened automatically.")
 
     while True:
         try:
@@ -597,9 +617,12 @@ def detect_humans() -> None:
             if not was_enabled:
                 print("[cam] ON — opening webcam (stays on until camera_off)")
                 was_enabled = True
+                # Intent to capture — if no real frame arrives, ts ages → watchdog email
+                write_heartbeat("capturing", touch_ts=True)
 
             if cap is None:
-                write_heartbeat("starting")
+                # Do NOT refresh heartbeat ts while stuck opening (watchdog must fire)
+                write_heartbeat("capturing", touch_ts=False)
                 if now - last_open_try < OPEN_COOLDOWN_SEC:
                     with frame_lock:
                         output_frame = make_idle_frame("Starting camera...")
@@ -608,37 +631,56 @@ def detect_humans() -> None:
                 last_open_try = now
                 cap = open_local_device(CAMERA_INDEX)
                 if cap is None:
-                    write_heartbeat("error")
+                    write_heartbeat("capturing", touch_ts=False)
                     with frame_lock:
                         output_frame = make_idle_frame("Waiting for usbipd camera...")
                     write_persons_snapshot(0, ts)
                     time.sleep(1.0)
                     continue
 
-            # User wants camera on: never release_cap below — only retry.
-            write_heartbeat("capturing")
-
             ret, frame = cap.read()
             if not ret or frame is None:
-                print("[cam] read failed — keeping device open (user did not turn OFF)")
-                write_heartbeat("capturing")
+                read_fail_streak += 1
+                print(
+                    f"[cam] read failed ({read_fail_streak}/{READ_FAILS_BEFORE_REOPEN}) "
+                    "— heartbeat not refreshed"
+                )
+                write_heartbeat("capturing", touch_ts=False)
                 with frame_lock:
-                    output_frame = make_idle_frame("Camera ON — retrying frame...")
-                time.sleep(0.15)
+                    output_frame = make_idle_frame(
+                        "Camera ON — no frame (will reopen /dev/video*)"
+                    )
+                # usbipd detach leaves a dead handle — drop it and reopen when device returns
+                if read_fail_streak >= READ_FAILS_BEFORE_REOPEN:
+                    print("[cam] recycling VideoCapture (usbipd reattach path)")
+                    release_cap(cap)
+                    cap = None
+                    read_fail_streak = 0
+                    last_open_try = 0.0  # allow immediate reopen attempt
+                time.sleep(0.25)
                 continue
+            read_fail_streak = 0
 
             thermal = read_thermal_control()
             yolo_in = int(thermal.get("yolo_input") or YOLO_INPUT)
-            sleep_ms = int(thermal.get("frame_sleep_ms") or 0)
+            detect_every = max(1, int(thermal.get("detect_every") or 1))
             thr_lvl = int(thermal.get("throttle_level") or 0)
 
-            t0 = time.time()
-            dets = detect_people(frame, input_size=yolo_in)
-            detect_ms = (time.time() - t0) * 1000.0
-            write_heartbeat("capturing")
+            # Fresh frame arrived — this is what resets the watchdog timer
+            write_heartbeat("capturing", touch_ts=True)
 
-            count_buffer.append(len(dets))
-            stable = sorted(count_buffer)[len(count_buffer) // 2]
+            # Thermal: skip YOLO some frames (keep stream live). Do NOT sleep the pipeline.
+            run_detect = (frame_i % detect_every) == 0
+            frame_i += 1
+            detect_ms = 0.0
+            if run_detect:
+                t0 = time.time()
+                last_dets = detect_people(frame, input_size=yolo_in)
+                detect_ms = (time.time() - t0) * 1000.0
+                count_buffer.append(len(last_dets))
+                stable = sorted(count_buffer)[len(count_buffer) // 2]
+
+            dets = last_dets
 
             for (box, kind) in dets:
                 x, y, w, h = box
@@ -674,7 +716,7 @@ def detect_humans() -> None:
                 (0, 255, 0),
                 2,
             )
-            thr_tag = f" | THR{thr_lvl}" if thr_lvl else ""
+            thr_tag = f" | THR{thr_lvl} skip={detect_every}" if thr_lvl else ""
             cv2.putText(
                 frame,
                 f"{stamp}  |  Persons: {stable}  |  FPS: {fps:.1f}  |  det {detect_ms:.0f}ms{thr_tag}",
@@ -715,15 +757,13 @@ def detect_humans() -> None:
             except Exception:
                 pass
 
+            # Always publish camera frame → stream stays smooth under thermal load
             with frame_lock:
                 output_frame = frame.copy()
-
-            if sleep_ms > 0:
-                time.sleep(sleep_ms / 1000.0)
         except Exception as exc:
             print(f"[cam] loop error (recovering, camera kept if ON): {exc}")
-            write_heartbeat("capturing" if enabled_cached else "error")
-            # Never release here — only camera_off releases the device.
+            # Keep old frame timestamp so watchdog can still fire
+            write_heartbeat("capturing" if enabled_cached else "idle", touch_ts=False)
             time.sleep(0.5)
 
 

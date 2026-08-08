@@ -28,12 +28,22 @@
 static float g_thermal_on = 85.0f;
 static float g_thermal_off = 78.0f;
 static int g_watchdog_sec = 30;
+static char g_student_id[64] = "402102657";
 
 static void trim_crlf(char *s)
 {
     size_t n = strlen(s);
     while (n > 0 && (s[n - 1] == '\n' || s[n - 1] == '\r' || s[n - 1] == ' '))
         s[--n] = '\0';
+}
+
+static void strip_quotes(char *s)
+{
+    size_t n = strlen(s);
+    if (n >= 2 && ((s[0] == '"' && s[n - 1] == '"') || (s[0] == '\'' && s[n - 1] == '\''))) {
+        memmove(s, s + 1, n - 2);
+        s[n - 2] = '\0';
+    }
 }
 
 static void load_part4_cfg(void)
@@ -50,37 +60,46 @@ static void load_part4_cfg(void)
             g_thermal_off = (float)atof(line + 16);
         else if (strncmp(line, "WATCHDOG_SEC=", 13) == 0)
             g_watchdog_sec = atoi(line + 13);
+        else if (strncmp(line, "STUDENT_ID=", 11) == 0) {
+            snprintf(g_student_id, sizeof(g_student_id), "%s", line + 11);
+            strip_quotes(g_student_id);
+        }
     }
     fclose(fp);
     if (g_watchdog_sec < 10)
         g_watchdog_sec = 10;
+    if (g_student_id[0] == '\0')
+        snprintf(g_student_id, sizeof(g_student_id), "402102657");
 }
 
 static void write_thermal_control(int level, float temp)
 {
-    FILE *fp = fopen(THERMAL_CTRL_PATH ".tmp", "w");
+    /* Smooth stream: never sleep the pipeline. Cut YOLO frequency / mild size only. */
     int yolo = 640;
-    int sleep_ms = 0;
+    int detect_every = 1;
     if (level >= 2) {
-        yolo = 320;
-        sleep_ms = 25;
+        yolo = 416; /* keep readable; 320 froze WSL too hard */
+        detect_every = 3;
     } else if (level == 1) {
-        yolo = 416;
-        sleep_ms = 10;
+        yolo = 640;
+        detect_every = 2;
     }
+    FILE *fp = fopen(THERMAL_CTRL_PATH ".tmp", "w");
     if (!fp)
         return;
     fprintf(fp,
-            "{\"throttle_level\":%d,\"cpu_temp\":%.2f,\"yolo_input\":%d,\"frame_sleep_ms\":%d}\n",
-            level, temp, yolo, sleep_ms);
+            "{\"throttle_level\":%d,\"cpu_temp\":%.2f,\"yolo_input\":%d,"
+            "\"detect_every\":%d,\"frame_sleep_ms\":0}\n",
+            level, temp, yolo, detect_every);
     fclose(fp);
     if (rename(THERMAL_CTRL_PATH ".tmp", THERMAL_CTRL_PATH) != 0) {
         fp = fopen(THERMAL_CTRL_PATH, "w");
         if (!fp)
             return;
         fprintf(fp,
-                "{\"throttle_level\":%d,\"cpu_temp\":%.2f,\"yolo_input\":%d,\"frame_sleep_ms\":%d}\n",
-                level, temp, yolo, sleep_ms);
+                "{\"throttle_level\":%d,\"cpu_temp\":%.2f,\"yolo_input\":%d,"
+                "\"detect_every\":%d,\"frame_sleep_ms\":0}\n",
+                level, temp, yolo, detect_every);
         fclose(fp);
     }
 }
@@ -140,7 +159,7 @@ static void *part4_thread(void *arg)
         char mode[32] = {0};
         static int ticks = 0;
 
-        if ((ticks++ % 30) == 0)
+        if ((ticks++ % 60) == 0)
             load_part4_cfg();
 
         if (read_persons_snapshot(&snap) == 0)
@@ -148,18 +167,25 @@ static void *part4_thread(void *arg)
         if (get_system_telemetry(&tel) == 0)
             temp = tel.cpu_temp;
 
-        /* ---- 4.1 Guard / anti-theft ---- */
-        if (guard_is_armed() && count >= 1 && prev_count == 0) {
-            if (now - last_guard_mail >= 5) {
+        /* ---- 4.1 Guard / anti-theft ----
+         * Fast alarm on any INCREASE in person count (0→1, 1→2, 2→3, …).
+         * Part 3 separately emails ~every 30s while persons≥1 (debounced).
+         */
+        if (guard_is_armed() && count > prev_count) {
+            if (now - last_guard_mail >= 2) {
                 char body[512];
+                char subj[160];
                 snprintf(body, sizeof(body),
-                         "GUARD ALARM (anti-theft)\nPersons detected: %d\nCPU temp: %.2f C\n"
-                         "Timestamp: %ld\nMQTT: home/<student_id>/alarm\n",
-                         count, temp, now);
-                email_send_event("[Smart Guard] GUARD ALARM — person detected", body, 1);
+                         "GUARD ALARM (anti-theft)\nStudent ID: %s\n"
+                         "Persons: %d → %d (increase)\nCPU temp: %.2f C\n"
+                         "Timestamp: %ld\nMQTT topic: home/%s/alarm\n",
+                         g_student_id, prev_count, count, temp, now, g_student_id);
+                snprintf(subj, sizeof(subj),
+                         "[Smart Guard] GUARD ALARM — person increase (%s)", g_student_id);
+                email_send_event(subj, body, 1);
                 mqtt_publish_alarm(count, temp, now);
                 last_guard_mail = now;
-                printf("[part4] GUARD alarm fired count=%d\n", count);
+                printf("[part4] GUARD alarm %d → %d\n", prev_count, count);
             }
         }
         prev_count = count;
@@ -167,23 +193,24 @@ static void *part4_thread(void *arg)
         /* ---- 4.3 Software watchdog ---- */
         if (watchdog_is_enabled() && read_heartbeat(&hb_ts, mode, sizeof(mode)) == 0) {
             long age = (hb_ts > 0) ? (now - hb_ts) : 0;
-            /* Only while detector claims capturing (camera ON and streaming frames) */
-            if (strcmp(mode, "capturing") == 0 && hb_ts > 0 && age > g_watchdog_sec &&
-                age < 3600) {
-                if (now - last_watch_mail >= 60) {
+            /* Camera intended ON (not idle) but no successful frame for >WATCHDOG_SEC */
+            int watching = (strcmp(mode, "idle") != 0);
+            if (watching && hb_ts > 0 && age > g_watchdog_sec && age < 3600) {
+                if (now - last_watch_mail >= 45) {
                     char body[640];
                     snprintf(body, sizeof(body),
                              "WARNING — camera tampering / no frames\n"
-                             "Image processing sent no new frame for >%d seconds while "
-                             "capturing.\nLast heartbeat ts=%ld age=%lds\n"
+                             "Student ID: %s\n"
+                             "No new camera frame for >%d seconds (mode=%s).\n"
+                             "Last heartbeat ts=%ld age=%lds\n"
                              "Restarting human_detector service.\n",
-                             g_watchdog_sec, hb_ts, age);
+                             g_student_id, g_watchdog_sec, mode, hb_ts, age);
                     email_send_event("[Smart Guard] WARNING — camera tampering", body, 0);
                     last_watch_mail = now;
                     {
                         int rc = system("systemctl restart human_detector >/dev/null 2>&1");
-                        printf("[part4] watchdog restart human_detector rc=%d age=%ld\n", rc,
-                               age);
+                        printf("[part4] watchdog email+restart rc=%d age=%ld mode=%s\n", rc, age,
+                               mode);
                     }
                 }
             }
@@ -206,7 +233,7 @@ static void *part4_thread(void *arg)
                     char body[512];
                     snprintf(body, sizeof(body),
                              "Adaptive thermal management\nCPU temp=%.2f C (threshold %.0f C).\n"
-                             "Throttle level=%d — reduced resolution / FPS.\n",
+                             "Throttle level=%d — run YOLO every N frames (stream stays live).\n",
                              temp, g_thermal_on, throttle_level);
                     email_send_event("[Smart Guard] Thermal throttle active", body, 0);
                     last_thermal_mail = now;
@@ -222,7 +249,7 @@ static void *part4_thread(void *arg)
             printf("[part4] thermal disabled → throttle cleared\n");
         }
 
-        sleep(2);
+        sleep(1); /* 1s poll — faster guard edge than 2s */
     }
     return NULL;
 }

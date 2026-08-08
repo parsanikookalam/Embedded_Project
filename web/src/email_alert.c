@@ -7,7 +7,6 @@
 #include "email_alert.h"
 #include "persons_state.h"
 #include "telemetry.h"
-#include "guard_state.h"
 
 #include <curl/curl.h>
 #include <pthread.h>
@@ -25,7 +24,7 @@ static char g_smtp_user[128] = "";
 static char g_smtp_pass[128] = "";
 static char g_mail_from[128] = "";
 static char g_mail_to[128] = "";
-static char g_student_id[64] = "unknown";
+static char g_student_id[64] = "402102657";
 static int g_debounce_sec = 30;
 static int g_enabled = 0;
 
@@ -345,9 +344,9 @@ static void *email_alert_thread(void *arg)
         if ((ticks++ % 15) == 0)
             load_email_config();
 
-        /* Part 3 normal alerts when guard is OFF. Guard-armed alerts are Part 4. */
-        if (g_enabled && !guard_is_armed() && read_persons_snapshot(&snap) == 0 &&
-            snap.count >= 1) {
+        /* Part 3B: while persons≥1, email at most once per EMAIL_DEBOUNCE_SEC (30s).
+         * Still runs when Guard is ARMED (Guard adds fast edge emails separately). */
+        if (g_enabled && read_persons_snapshot(&snap) == 0 && snap.count >= 1) {
             if (get_system_telemetry(&tel) == 0)
                 temp = tel.cpu_temp;
             send_alert_email(snap.count, snap.timestamp ? snap.timestamp : (long)time(NULL),
