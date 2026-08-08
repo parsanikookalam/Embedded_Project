@@ -6,61 +6,33 @@
 **Student ID:** 402102657  
 **Target:** WSL Ubuntu Linux (accepted Linux VM path; same design as Orange Pi)  
 
----
-
-## 1. Introduction
-
-Part 1 requires a **native C web server** that serves a secure web dashboard for the Smart Guard System. According to the project brief, the core application logic must be implemented in **C**. Python is reserved for later vision processing (Part 3+).
-
-This part delivers:
-
-1. An HTTP service that permanently redirects clients to HTTPS  
-2. An HTTPS service using a **self-signed TLS certificate** whose Common Name (CN) is the student ID  
-3. A browser dashboard served from the C process  
-4. Automatic start of the web server after reboot via **systemd**
+This report follows the **same order as the project PDF** for Part 1.
 
 ---
 
-## 2. Objectives (from project PDF)
+## 1. C language web server
 
-| Requirement | Status |
-|-------------|--------|
-| C language web server | Done |
-| Serve HTML dashboard | Done |
-| Live camera area on dashboard (via later stream API) | Done (wired to `/api/v1/stream`) |
-| HTTPS with self-signed certificate | Done |
-| Certificate CN = student ID (`402102657`) | Done |
-| HTTP → HTTPS redirect | Done |
-| systemd unit / auto-start | Done |
+The project brief requires the **main application logic in C**. For Part 1 that means a native **C web server** (not Python Flask/Django, not Node).
 
----
+### 1.1 What was implemented
 
-## 3. System architecture (Part 1)
+| Item | Detail |
+|------|--------|
+| Language | C (`gcc`) |
+| Libraries | POSIX sockets, OpenSSL (`libssl`), pthreads |
+| Binary | `web/web_server` |
+| Entry | `web/src/main.c` |
+| HTTP/HTTPS logic | `web/src/server.c` |
+| Build | `web/Makefile` → `make` |
 
-```
-Browser
-   │
-   ├─ http://127.0.0.1:8080/  ──301──►  https://127.0.0.1:8443/
-   │
-   └─ https://127.0.0.1:8443/  ──TLS──►  web_server (C)
-                                              │
-                                              ├─ www/index.html  (dashboard)
-                                              ├─ www/server.crt / server.key
-                                              └─ (later parts: REST, stream proxy…)
-```
-
-On a physical Orange Pi the same design can use ports **80/443**. On WSL those ports are often reserved by Windows, so this deployment uses:
+On Orange Pi the usual ports are **80 (HTTP)** and **443 (HTTPS)**. On WSL those ports are often blocked by Windows, so this deployment uses:
 
 - `HTTP_PORT=8080`
 - `HTTPS_PORT=8443`
 
-Configured in `config.env`.
+(set in `config.env`). Behaviour is the same; only the port numbers differ.
 
----
-
-## 4. Implementation
-
-### 4.1 Project layout (web)
+### 1.2 Project layout (web)
 
 ```
 web/
@@ -69,55 +41,135 @@ web/
 ├── include/
 │   └── http_server.h
 ├── src/
-│   ├── main.c              # entry: start services, then HTTP/HTTPS
-│   └── server.c            # sockets, TLS, redirect, HTML, APIs
+│   ├── main.c              # start services, then listen
+│   └── server.c            # sockets, TLS, pages, later APIs
 └── www/
-    ├── index.html          # dashboard
-    ├── server.crt          # self-signed certificate
-    └── server.key          # private key
+    ├── index.html          # dashboard (Section 2)
+    ├── server.crt          # TLS cert (Section 3)
+    └── server.key
 ```
 
-### 4.2 Building the C server
+### 1.3 How to build
 
 ```bash
 cd ~/embedded_project/web
 make clean all
 ```
 
-Dependencies: `gcc`, OpenSSL development libraries (`libssl-dev`).
+Dependencies: `build-essential`, `libssl-dev`.
 
-### 4.3 Self-signed TLS certificate (CN = student ID)
+Each client connection is handled on a **detached pthread**, so one long request (e.g. video stream in later parts) does not block the whole server.
 
-Certificate generation is automated by `scripts/gen_ssl.sh`:
+**Figure 1 — C web server binary built**
 
-- Algorithm: RSA 2048  
-- Validity: 365 days  
-- Subject: `CN=402102657`, `O=Smart Guard System`, `C=IR`  
-- Output: `web/www/server.crt`, `web/www/server.key`
+- **What to run in terminal (WSL):**
+  ```bash
+  cd ~/embedded_project/web
+  make clean all
+  ls -l web_server
+  file web_server
+  ```
+- **How to take the picture:** Screenshot the terminal showing a successful `make` and that `web_server` exists. Save as:
+  `report/part 1/fig/01_c_build.png`
 
-Verify:
+![Figure 1 — Built C web_server binary](fig/01_c_build.png)
+
+---
+
+## 2. HTML dashboard
+
+The C server must serve an **HTML dashboard** in the browser (live camera area is used from later parts via the same server).
+
+### 2.1 How it is served
+
+- File on disk: `web/www/index.html`
+- Request: `GET /` over HTTPS
+- The C process opens the file and sends it with `Content-Type: text/html`
+
+### 2.2 What the page shows
+
+- Project title **Smart Guard System**
+- Student **name** and **ID** (loaded from `/api/v1/config` — filled in Part 2, but the HTML is Part 1)
+- Live camera panel (URL `/api/v1/stream` — stream content from Part 3+)
+- Telemetry cards and control buttons (filled by Parts 2–4; still served by this same C server)
+
+**Figure 2 — HTML dashboard in the browser**
+
+- **What to run in terminal (WSL):** optional check that the page returns HTTP 200:
+  ```bash
+  systemctl is-active web_server
+  curl -sk -o /dev/null -w "%{http_code}\n" https://127.0.0.1:8443/
+  # expect: 200
+  ```
+- **How to take the picture:** Open Chrome/Edge and go to  
+  `https://127.0.0.1:8443/`  
+  If the browser warns about the self-signed certificate, click **Advanced → Proceed**. When the Smart Guard page is visible (name + student ID), screenshot the browser and save as:
+  `report/part 1/fig/02_dashboard.png`
+
+![Figure 2 — Smart Guard HTML dashboard](fig/02_dashboard.png)
+
+---
+
+## 3. HTTPS with self-signed certificate (CN = student ID)
+
+The PDF requires the site to use **HTTPS** with a **self-signed** certificate, and the certificate **Common Name (CN) must be the student ID**.
+
+### 3.1 Certificate parameters
+
+Generated by `scripts/gen_ssl.sh`:
+
+| Field | Value |
+|-------|--------|
+| Type | Self-signed X.509 |
+| Key | RSA 2048 |
+| Validity | 365 days |
+| **CN** | **402102657** |
+| O | Smart Guard System |
+| C | IR |
+| Files | `web/www/server.crt`, `web/www/server.key` |
+
+### 3.2 Load in the C server
+
+The HTTPS listener creates an OpenSSL context, loads `server.crt` / `server.key`, then accepts TLS connections on port **8443**.
+
+### 3.3 Verify CN
 
 ```bash
 openssl x509 -in ~/embedded_project/web/www/server.crt -noout -subject
 # subject=CN = 402102657, O = Smart Guard System, C = IR
 ```
 
-**Figure 1 — Certificate subject (CN = student ID)**
+**Figure 3 — Certificate subject (CN = student ID)**  
+*(This is the CN picture you already prepared.)*
 
 - **What to run in terminal (WSL):**
   ```bash
   openssl x509 -in ~/embedded_project/web/www/server.crt -noout -subject
   ```
-- **How to take the picture:** Keep the WSL terminal window visible so the full `subject=CN = 402102657, …` line is on screen. Take a Windows screenshot (`Win + Shift + S` or `PrtSc`), crop to the terminal output, and save as:
-  `report/part 1/fig/01_cert_subject.png`
+- **How to take the picture:** Screenshot the terminal so the full `subject=CN = 402102657, …` line is visible. Save as:
+  `report/part 1/fig/03_cert_subject.png`
 
-![Figure 1 — Certificate subject (CN=student ID)](fig/01_cert_subject.png)
+![Figure 3 — Certificate CN = 402102657](fig/03_cert_subject.png)
 
-Because the certificate is self-signed, browsers show a security warning. For the course demo, proceed by accepting the exception (or use `curl -k`).
+Browsers will warn because the cert is self-signed. For the course demo, accept the exception (or use `curl -k`).
 
-### 4.4 HTTP → HTTPS redirect
+**Figure 3b (optional) — Browser certificate warning**
 
-A dedicated thread listens on the HTTP port. For each request it answers:
+- **What to run:** none (browser only).
+- **How to take the picture:** On first visit to `https://127.0.0.1:8443/`, capture the “Your connection is not private” screen before Proceed. Save as:
+  `report/part 1/fig/03b_browser_cert_warning.png`
+
+![Figure 3b — Self-signed cert warning (optional)](fig/03b_browser_cert_warning.png)
+
+---
+
+## 4. HTTP → HTTPS redirect
+
+The PDF requires that plain **HTTP** traffic is redirected to **HTTPS**.
+
+### 4.1 Behaviour
+
+A separate thread listens on the HTTP port (**8080** on WSL). For each request the server replies:
 
 ```http
 HTTP/1.1 301 Moved Permanently
@@ -125,70 +177,39 @@ Location: https://<Host>:8443/
 Connection: close
 ```
 
-The `Host` header is parsed so the redirect works for `127.0.0.1` and LAN names.
+The `Host` header is read so the redirect works for `127.0.0.1` and other hostnames.
 
-**Figure 2 — HTTP 301 redirect to HTTPS**
+```
+Browser ──http://127.0.0.1:8080/──► web_server (HTTP)
+                │
+                └── 301 Location: https://127.0.0.1:8443/
+                                        │
+Browser ──https://127.0.0.1:8443/──────► web_server (HTTPS + dashboard)
+```
 
-- **What to run in terminal (WSL):**  
-  First make sure the web server is running:
+**Figure 4 — HTTP 301 redirect to HTTPS**
+
+- **What to run in terminal (WSL):**
   ```bash
   systemctl is-active web_server
   curl -v http://127.0.0.1:8080/
   ```
-  You should see `HTTP/1.1 301` and a `Location: https://127.0.0.1:8443/` (or similar) header.
-- **How to take the picture:** Screenshot the terminal region that shows the `301` status line and the `Location:` header. Save as:
-  `report/part 1/fig/02_http_redirect.png`
+  You should see `HTTP/1.1 301` and `Location: https://127.0.0.1:8443/` (or similar).
+- **How to take the picture:** Screenshot the terminal region with the `301` status and the `Location:` header. Save as:
+  `report/part 1/fig/04_http_redirect.png`
 
-![Figure 2 — curl -v showing 301 to HTTPS](fig/02_http_redirect.png)
+![Figure 4 — curl showing 301 to HTTPS](fig/04_http_redirect.png)
 
-### 4.5 HTTPS dashboard
+---
 
-The HTTPS listener:
+## 5. systemd auto-start
 
-1. Creates an OpenSSL `SSL_CTX`  
-2. Loads `www/server.crt` and `www/server.key`  
-3. Accepts connections with TLS  
-4. Serves `www/index.html` for `GET /`  
+The PDF requires the web server to **start automatically** after boot (embedded appliance style).
 
-The dashboard shows:
+### 5.1 Unit file
 
-- Student name and ID (from `/api/v1/config`)  
-- Live stream panel (`/api/v1/stream`)  
-- Telemetry widgets (filled by Part 2+)  
-- Part 4 control buttons (added later; HTML still served by Part 1’s C server)
-
-**Figure 3 — HTTPS dashboard in the browser**
-
-- **What to run in terminal (WSL):** optional check that HTTPS answers:
-  ```bash
-  systemctl is-active web_server
-  curl -sk -o /dev/null -w "%{http_code}\n" https://127.0.0.1:8443/
-  # expect: 200
-  ```
-- **How to take the picture:** Open **Chrome/Edge** on Windows and go to  
-  `https://127.0.0.1:8443/`  
-  If the browser warns about a self-signed certificate, click **Advanced → Proceed** (unsafe). When the Smart Guard page loads (name + student ID visible), screenshot the browser window and save as:
-  `report/part 1/fig/03_dashboard.png`
-
-![Figure 3 — Smart Guard dashboard over HTTPS](fig/03_dashboard.png)
-
-**Figure 3b (optional) — Browser certificate warning**
-
-- **What to run:** none (browser only).
-- **How to take the picture:** On first visit to `https://127.0.0.1:8443/`, capture the “Your connection is not private” / certificate warning screen before clicking Proceed. Save as:
-  `report/part 1/fig/05_optional_browser_cert_warning.png`
-
-![Figure 3b — Self-signed cert warning (optional)](fig/05_optional_browser_cert_warning.png)
-
-### 4.6 Concurrent clients (threading)
-
-Each HTTPS connection is handled on a **detached pthread** so a long-lived MJPEG stream does not block telemetry or other clients. (Earlier fork-per-request caused instability with MQTT/email worker threads; threading is the production approach in this project.)
-
-### 4.7 systemd auto-start
-
-Unit file: `services/web_server.service`
-
-Important settings:
+Path in the repo: `services/web_server.service`  
+Installed to: `/etc/systemd/system/web_server.service`
 
 | Key | Value |
 |-----|--------|
@@ -196,9 +217,9 @@ Important settings:
 | `EnvironmentFile` | `…/config.env` |
 | `ExecStart` | `…/web/web_server` |
 | `Restart` | `always` |
-| Ordering | After `network` / vision service |
+| Ordering | After network (and vision service when Part 3 is installed) |
 
-Install / enable:
+### 5.2 Install / enable
 
 ```bash
 sudo cp ~/embedded_project/services/web_server.service /etc/systemd/system/
@@ -207,23 +228,24 @@ sudo systemctl enable --now web_server
 systemctl status web_server --no-pager
 ```
 
-**Figure 4 — systemd unit running**
+Or use the project helper: `bash scripts/install_services.sh`.
+
+**Figure 5 — systemd unit running**
 
 - **What to run in terminal (WSL):**
   ```bash
   systemctl status web_server --no-pager
+  systemctl is-enabled web_server
   ```
-  Confirm lines like `Active: active (running)` and `Loaded: … enabled`.
-- **How to take the picture:** Screenshot the terminal output of that status command (include the green `active (running)` if shown). Save as:
-  `report/part 1/fig/04_systemd_web_server.png`
+  Confirm `Active: active (running)` and `enabled`.
+- **How to take the picture:** Screenshot that status output. Save as:
+  `report/part 1/fig/05_systemd_web_server.png`
 
-![Figure 4 — systemctl status web_server](fig/04_systemd_web_server.png)
+![Figure 5 — systemctl status web_server](fig/05_systemd_web_server.png)
 
 ---
 
-## 5. Configuration
-
-Relevant `config.env` keys for Part 1:
+## 6. Configuration used in Part 1
 
 ```env
 STUDENT_ID=402102657
@@ -233,81 +255,59 @@ HTTP_PORT=8080
 HTTPS_PORT=8443
 ```
 
-The C server reads these at startup from `../config.env` (relative to `WorkingDirectory=web`).
+The C server loads `../config.env` relative to `WorkingDirectory=web`.
 
 ---
 
-## 6. Test procedure & results
+## 7. Test checklist (PDF order)
 
-### Test 1.1 — Certificate CN
-
-| Step | Action | Expected |
-|------|--------|----------|
-| 1 | `openssl x509 -in web/www/server.crt -noout -subject` | CN contains `402102657` |
-| Result | ☐ Pass / ☐ Fail | |
-
-### Test 1.2 — HTTP redirect
-
-| Step | Action | Expected |
-|------|--------|----------|
-| 1 | `curl -v http://127.0.0.1:8080/` | `301` and `Location: https://…:8443/` |
-| Result | ☐ Pass / ☐ Fail | |
-
-### Test 1.3 — HTTPS dashboard
-
-| Step | Action | Expected |
-|------|--------|----------|
-| 1 | Browse `https://127.0.0.1:8443/` | Dashboard HTML loads over TLS |
-| 2 | Page title / header | Shows student name and ID |
-| Result | ☐ Pass / ☐ Fail | |
-
-### Test 1.4 — systemd persistence
-
-| Step | Action | Expected |
-|------|--------|----------|
-| 1 | `systemctl is-enabled web_server` | `enabled` |
-| 2 | `sudo systemctl restart web_server` | Active (running) |
-| 3 | (Optional) reboot WSL and re-check | Service starts automatically |
-| Result | ☐ Pass / ☐ Fail | |
+| # | PDF requirement | Test | Expected | Pass? |
+|---|-----------------|------|----------|-------|
+| 1 | C web server | `make` + run `web_server` | Binary listens | ☐ |
+| 2 | HTML dashboard | Open `https://127.0.0.1:8443/` | Page loads | ☐ |
+| 3 | HTTPS + CN = student ID | `openssl x509 … -subject` | CN = `402102657` | ☐ |
+| 4 | HTTP → HTTPS | `curl -v http://127.0.0.1:8080/` | `301` + `Location: https://…` | ☐ |
+| 5 | systemd | `systemctl status/is-enabled web_server` | active + enabled | ☐ |
 
 ---
 
-## 7. Figures checklist
+## 8. Figures checklist
 
-Put image files in `report/part 1/fig/`. For each figure, the report section above lists **what to run** and **how to capture**.
+| File | Matches PDF item | Command / how to capture |
+|------|------------------|---------------------------|
+| `fig/01_c_build.png` | (1) C web server | `make` + `ls` / screenshot terminal |
+| `fig/02_dashboard.png` | (2) HTML dashboard | Browser at `https://127.0.0.1:8443/` |
+| `fig/03_cert_subject.png` | (3) HTTPS CN | `openssl x509 … -subject` *(your CN picture)* |
+| `fig/03b_browser_cert_warning.png` | (3) optional | Browser warning page |
+| `fig/04_http_redirect.png` | (4) redirect | `curl -v http://127.0.0.1:8080/` |
+| `fig/05_systemd_web_server.png` | (5) systemd | `systemctl status web_server --no-pager` |
 
-| File | Terminal command (if any) | How to capture |
-|------|---------------------------|----------------|
-| `fig/01_cert_subject.png` | `openssl x509 -in ~/embedded_project/web/www/server.crt -noout -subject` | Screenshot WSL terminal showing CN |
-| `fig/02_http_redirect.png` | `curl -v http://127.0.0.1:8080/` | Screenshot `301` + `Location:` lines |
-| `fig/03_dashboard.png` | optional: `curl -sk -o /dev/null -w "%{http_code}\n" https://127.0.0.1:8443/` | Screenshot browser at `https://127.0.0.1:8443/` |
-| `fig/04_systemd_web_server.png` | `systemctl status web_server --no-pager` | Screenshot status output |
-| `fig/05_optional_browser_cert_warning.png` | *(none)* | Screenshot browser cert warning page |
+**Note:** If your CN screenshot is still named `01_cert_subject.png`, rename or copy it to `fig/03_cert_subject.png` so it matches Section 3.
 
----
-
-## 8. Discussion
-
-Part 1 establishes the always-on secure web front-end for Smart Guard. Using **C + OpenSSL** satisfies the course requirement that the application core is not a Python web framework. WSL port mapping (8080/8443) preserves the same redirect/TLS design that would use 80/443 on an Orange Pi. systemd ensures the dashboard comes up after reboot without manual intervention—important for an embedded “appliance” style submission.
-
-Later parts reuse this same C process for REST APIs (Part 2), email/MQTT (Part 3), and guard/watchdog/thermal coordination (Part 4).
+```bash
+# from WSL, if needed:
+cp "report/part 1/fig/01_cert_subject.png" "report/part 1/fig/03_cert_subject.png"
+```
 
 ---
 
 ## 9. Conclusion
 
-Part 1 is complete:
+Part 1 is complete in the **PDF order**:
 
-- C HTTPS web server with self-signed cert **CN = 402102657**  
-- HTTP → HTTPS redirect  
-- HTML dashboard served securely  
-- systemd unit with auto-restart  
+1. **C** web server (`web/web_server`)  
+2. **HTML** dashboard (`www/index.html` over HTTPS)  
+3. **HTTPS** self-signed cert with **CN = 402102657**  
+4. **HTTP → HTTPS** redirect (`8080` → `8443`)  
+5. **systemd** auto-start (`web_server.service`)  
+
+Later parts reuse this same C process for REST (Part 2), email/MQTT (Part 3), and Guard/watchdog/thermal (Part 4).
 
 ---
 
 ## 10. References
 
 - Course PDF: *Final Project — Embedded Systems (Smart Guard System)*  
-- OpenSSL documentation (self-signed certificates, `TLS_server_method`)  
+- OpenSSL (`TLS_server_method`, self-signed certificates)  
 - systemd.service(5)  
-- Project sources: `web/src/server.c`, `scripts/gen_ssl.sh`, `services/web_server.service`
+- Sources: `web/src/server.c`, `scripts/gen_ssl.sh`, `services/web_server.service`
