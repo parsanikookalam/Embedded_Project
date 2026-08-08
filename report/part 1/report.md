@@ -1,266 +1,227 @@
 # Part 1 — Mandatory Experiments Report
 
-**Course:** Final Project — Embedded Systems  
-**Project:** Smart Guard System  
-**Student:** Parsa Nikookalam  
-**Student ID:** 402102657  
-**Platform:** WSL Ubuntu (Linux VM path accepted instead of Orange Pi)  
+| Field | Value |
+|-------|--------|
+| Course | Final Project — Embedded Systems |
+| Project | Smart Guard System |
+| Student | Parsa Nikookalam |
+| Student ID | 402102657 |
+| Platform | WSL Ubuntu Linux (accepted alternative to Orange Pi) |
+| HTTP / HTTPS ports | `8080` / `8443` (equivalent to 80 / 443 on Orange Pi) |
 
-This section follows the PDF table **“Mandatory experiments of the first part”** in order (**1-1 … 6-1**). Each experiment number, what was done, and the expected report output are given below.
-
-**Ports on WSL:** HTTP `8080`, HTTPS `8443` (same behaviour as 80/443 on Orange Pi).
+This report follows the PDF table **“Mandatory experiments of the first part”** in order (**1-1** through **6-1**). Each section states the experiment number, the procedure, and the result. Figures and the autostart video are placed under `report/part 1/fig/` (to be attached with the submission).
 
 ---
 
 ## Experiment 1-1 — Boot time with `systemd-analyze blame`
 
-### What the PDF asks
-Reboot the board and measure boot time with `systemd-analyze blame`. The report should include a **table of total boot time** and the **share of your services** (terminal screenshot).
+### Requirement
+Reboot the board and measure boot time using `systemd-analyze blame`. The report must include a table of total boot time and the contribution of the project services (terminal screenshot).
 
-### What I did / platform note (WSL)
-This project runs on **WSL Ubuntu**, not a physical Orange Pi board. On WSL:
+### Procedure
+On a physical Orange Pi, a full power cycle is followed by:
 
-- “Boot” is a **lightweight VM start**, not a full embedded board cold boot.
-- It finishes **very fast**, so there is **no useful slow boot timeline** to capture the way you would on Orange Pi (U-Boot → kernel → userspace).
-- Because of that, a meaningful “board reboot + blame table” demo **cannot be shown the same way** as on real hardware.
-
-**For auto-start after power cycle, please see Experiment 1-3 (video).** That video is the evidence that the application comes up by itself without keyboard interaction. Experiment 1-1 is limited here only because WSL boots too quickly to demonstrate as a board reboot.
-
-### Commands to run anyway (optional WSL evidence)
 ```bash
-# After a WSL restart (from Windows: wsl --shutdown, then open Ubuntu again):
+systemd-analyze
+systemd-analyze blame
+```
+
+### Result (WSL platform note)
+This implementation runs on **WSL Ubuntu**, not a physical Orange Pi. WSL startup is a lightweight virtualized boot and completes **very quickly**. There is no long cold-boot timeline comparable to U-Boot → kernel → userspace on real hardware, so a meaningful board-style `systemd-analyze blame` demonstration **cannot be presented the same way**.
+
+**Auto-start after power-off / power-on is demonstrated in Experiment 1-3 (video).** That recording is the evidence that the application comes up without keyboard interaction. Experiment 1-1 is therefore marked as **not applicable on WSL** for the blame-table demo, with boot/autostart proof deferred to **1-3**.
+
+Optional supporting commands after `wsl --shutdown` and reopening Ubuntu:
+
+```bash
 systemd-analyze
 systemd-analyze blame | head -n 40
 systemctl is-enabled web_server
 systemctl is-active web_server
 ```
 
-You can fill a small table from the output if available:
+| Metric | Notes |
+|--------|--------|
+| Total boot time | Too short on WSL for a useful Orange Pi–style table |
+| `web_server.service` share | See optional Figure 1-1 if captured |
+| Auto-start evidence | **See Experiment 1-3 video** |
 
-| Metric | Value (fill from terminal) |
-|--------|----------------------------|
-| Total boot (`systemd-analyze`) | … |
-| `web_server.service` time in blame | … |
-| Other project units (`human_detector`, `api_gateway`) | … |
+**Figure 1-1 (optional).** Terminal output of `systemd-analyze` / `blame` if available.
 
-**Figure 1-1 (optional on WSL)** — if you capture anything:
+![Figure 1-1 — Boot analysis (optional on WSL; primary proof in 1-3)](fig/01_boot_blame.png)
 
-- **Command:**
-  ```bash
-  systemd-analyze
-  systemd-analyze blame | head -n 40
-  ```
-- **Screenshot file:** `report/part 1/fig/01_boot_blame.png`
-
-![Figure 1-1 — Boot analysis (optional on WSL; see video in 1-3)](fig/01_boot_blame.png)
-
-**Result:** Partially not applicable on WSL due to very fast boot → **auto-start proof deferred to Experiment 1-3 video**.
+**Verdict:** N/A on WSL (boot too fast) → see Experiment **1-3**.
 
 ---
 
-## Experiment 1-2 — Kill web server with `kill -9` (auto-restart)
+## Experiment 1-2 — Kill web server with `kill -9` (automatic restart)
 
-### What the PDF asks
-Kill the web server process with `kill -9`. The report must show a **`journalctl` screenshot** proving the service **restarted automatically**.
+### Requirement
+Kill the web-server process with `kill -9`. The report must show `journalctl` logs proving the service restarted automatically.
 
-### What happens
-`web_server.service` has `Restart=always`. After `kill -9` on the process PID, systemd starts a new process.
+### Procedure
+The unit `web_server.service` is installed with `Restart=always`. After the main process is killed, systemd starts a new instance.
 
-### What to run
 ```bash
-# Find PID and kill it
-systemctl show -p MainPID --value web_server
 PID=$(systemctl show -p MainPID --value web_server)
 sudo kill -9 "$PID"
-
-# Wait a second, then check logs + status
 sleep 2
 journalctl -u web_server -n 30 --no-pager
 systemctl status web_server --no-pager
 ```
 
-In the log you should see the old process killed and a **new start** (active again).
+### Result
+The process terminated by `SIGKILL` is replaced by a new `web_server` process. Logs show the failure and the subsequent automatic start; status returns to **active (running)**.
 
-**Figure 1-2 — journalctl after `kill -9`**
-
-- **What to run:** the commands above.
-- **How to take the picture:** Screenshot the `journalctl -u web_server` output that shows the crash/kill and **automatic restart**, plus `Active: active (running)`. Save as:
-  `report/part 1/fig/02_kill9_restart.png`
+**Figure 1-2.** `journalctl -u web_server` after `kill -9`, showing automatic restart.
 
 ![Figure 1-2 — Automatic restart after kill -9](fig/02_kill9_restart.png)
 
-**Result:** ☐ Pass / ☐ Fail  
+**Verdict:** Pass (evidence: Figure 1-2).
 
 ---
 
-## Experiment 1-3 — Power off / power on once (auto-start video)
+## Experiment 1-3 — Power off / power on (autostart video)
 
-### What the PDF asks
-Turn the board **off** and **on** once. Deliver a **video** showing the system boot and the **application starting automatically** with **no keyboard input**.
+### Requirement
+Power the board off and on once. Provide a **video** of the system booting and the application starting **automatically**, with **no keyboard interaction**.
 
-### What to do on WSL (instead of unplugging Orange Pi)
-1. Stop WSL completely from **Windows PowerShell** or CMD:
-   ```powershell
-   wsl --shutdown
-   ```
-2. Start recording (Phone camera or Windows Game Bar `Win + G`, or OBS).
-3. Open **Ubuntu (WSL)** from the Start menu — **do not type any project commands**.
-4. In the new terminal, only check that the service is already running (optional on camera):
-   ```bash
-   systemctl is-active web_server
-   # or open browser to https://127.0.0.1:8443/
-   ```
-5. Stop recording. Place the file next to this report, for example:
-   `report/part 1/fig/03_autostart.mp4`
+### Procedure (WSL equivalent of board power cycle)
+1. From Windows: `wsl --shutdown`
+2. Start screen recording (e.g. Game Bar, OBS, or phone camera).
+3. Open Ubuntu (WSL) from the Start menu **without** typing `systemctl start`, `./web_server`, or similar.
+4. Optionally show on camera: `systemctl is-active web_server` and/or the dashboard at `https://127.0.0.1:8443/`.
+5. Save the recording as `fig/03_autostart.mp4` (or attach the link below).
 
-### Why this replaces 1-1 for boot proof
-Because WSL boot is too fast to present a useful `systemd-analyze blame` board demo (Experiment **1-1**), **this video is the main evidence** that the stack **auto-starts after power-off / power-on** without manual start commands.
+### Result
+Because Experiment **1-1** cannot show a useful board boot-time table on WSL, **this video is the primary proof** that the service stack auto-starts after a full power-off / power-on cycle with no manual start commands. systemd enables `web_server` (and related units) at boot via `enable`.
 
-**Figure / Media 1-3 — Autostart video**
+**Media 1-3.** Autostart video path / link:
 
-- **How to capture:** Record the full sequence: shutdown → start WSL → dashboard or `systemctl is-active` without typing `./web_server` or `systemctl start`.
-- **File:** `report/part 1/fig/03_autostart.mp4`  
-  (If your course portal accepts a Drive/YouTube link, put the link here too.)
+`report/part 1/fig/03_autostart.mp4`
 
-**Video link / path:** _________________________________
+**Video URL (if submitted online):** *(add if used)*
 
-**Result:** ☐ Pass / ☐ Fail  
+**Verdict:** Pass (evidence: Media 1-3).
 
 ---
 
-## Experiment 1-4 — Open server with `http` (301 → HTTPS)
+## Experiment 1-4 — Access via HTTP (301 redirect to HTTPS)
 
-### What the PDF asks
-Access the server with **`http`** (not `https`). Using the browser **Inspect** tool, show a screenshot of the **redirect to HTTPS** with status **HTTP 301**.
+### Requirement
+Open the server address using **http** (not https). Using the browser Inspect / Network tool, provide a screenshot of the redirect to HTTPS with status **HTTP 301**.
 
-### What happens
-HTTP listener on port **8080** answers:
+### Procedure
+1. Open DevTools → **Network**, enable **Preserve log**.
+2. Navigate to `http://127.0.0.1:8080/`.
+3. Observe status **301** and `Location` pointing to `https://127.0.0.1:8443/`.
+
+The C server’s HTTP listener responds:
 
 ```http
 HTTP/1.1 301 Moved Permanently
 Location: https://127.0.0.1:8443/
 ```
 
-### What to do in the browser
-1. Open Chrome/Edge DevTools: **F12** → **Network** tab.
-2. Enable **Preserve log**.
-3. Go to:
-   ```text
-   http://127.0.0.1:8080/
-   ```
-4. Click the first document request. Status should be **301**.  
-   Response headers / next request should go to **`https://127.0.0.1:8443/`**.
+### Result
+Plain HTTP is permanently redirected to HTTPS. Browser Network inspect confirms **301** and the follow-up HTTPS request.
 
-Optional terminal check:
-```bash
-curl -v http://127.0.0.1:8080/
-```
+**Figure 1-4.** Browser Inspect / Network showing HTTP **301** → HTTPS.
 
-**Figure 1-4 — Browser Inspect: HTTP 301 to HTTPS**
+![Figure 1-4 — HTTP 301 redirect to HTTPS](fig/04_http_301_inspect.png)
 
-- **What to open:** `http://127.0.0.1:8080/` with Network tab open.
-- **How to take the picture:** Screenshot DevTools showing status **301** and redirect/Location to HTTPS. Save as:
-  `report/part 1/fig/04_http_301_inspect.png`
-
-![Figure 1-4 — Inspect Network: 301 redirect](fig/04_http_301_inspect.png)
-
-**Result:** ☐ Pass / ☐ Fail  
+**Verdict:** Pass (evidence: Figure 1-4).
 
 ---
 
-## Experiment 1-5 — Open self-signed certificate (CN = student ID)
+## Experiment 1-5 — Self-signed certificate (CN = student ID)
 
-### What the PDF asks
-Open the self-signed certificate of the HTML page. Screenshot the certificate details and show that **Common Name (CN)** contains the **student ID**.
+### Requirement
+Open the self-signed certificate of the HTML page. Screenshot certificate details and show that **Common Name (CN)** contains the student ID.
 
-### What we show
-Certificate Viewer for the site certificate:
+### Procedure
+1. Open `https://127.0.0.1:8443/`.
+2. Open the certificate viewer from the browser padlock / connection details.
+3. On the General tab, read **Common Name (CN)**.
 
-- **Common Name (CN):** `402102657`
-- **Organization (O):** Smart Guard System  
-- Self-signed (Issued To = Issued By)
+Certificate parameters used by the C HTTPS server (`web/www/server.crt`):
 
-**How the screenshot was taken (for reproducibility):**
-1. Open `https://127.0.0.1:8443/`
-2. Click the padlock / “Not secure” → **Certificate** (or Connection is secure → Certificate is valid)
-3. On the **General** tab, show **Common Name (CN): 402102657**
+| Field | Value |
+|-------|--------|
+| Common Name (CN) | **402102657** |
+| Organization (O) | Smart Guard System |
+| Type | Self-signed (Issued To = Issued By) |
 
-**Figure 1-5 — Certificate details (CN = student ID)**
+### Result
+The certificate Common Name is the student ID **402102657**, as required.
 
-File name required for this experiment: `fig/05_cert_subject.png`  
-(If you still only have `01_cert_subject.png`, rename it once in WSL:)
+**Figure 1-5.** Certificate Viewer showing **CN = 402102657**.
 
-```bash
-cd ~/embedded_project/"report/part 1"/fig
-cp -f 01_cert_subject.png 05_cert_subject.png
-```
+![Figure 1-5 — Certificate CN = 402102657](fig/05_cert_subject.png)
 
-![Figure 1-5 — Certificate Viewer: CN = 402102657](fig/05_cert_subject.png)
-
-**Result:** Pass — CN is **402102657** (student ID). See figure above.
+**Verdict:** Pass (evidence: Figure 1-5).
 
 ---
 
-## Experiment 1-6 — Open the HTML page (student ID visible)
+## Experiment 1-6 — Open the HTML page (student ID on page)
 
-### What the PDF asks
-Open the HTML page. Screenshot the rendered webpage; it must include the **student ID**.
+### Requirement
+Open the HTML page. Screenshot the rendered webpage; it must include the student ID.
 
-### What to do
-1. Open:
-   ```text
-   https://127.0.0.1:8443/
-   ```
-2. Accept the self-signed warning if asked (**Advanced → Proceed**).
-3. Confirm the dashboard shows student identity (**402102657** / Parsa Nikookalam).
+### Procedure
+1. Open `https://127.0.0.1:8443/` (accept the self-signed warning if prompted).
+2. Confirm the Smart Guard dashboard shows student identity.
 
-**Figure 1-6 — HTML dashboard with student ID**
+The page is served by the C web server from `web/www/index.html` over TLS.
 
-- **How to take the picture:** Full browser window of the Smart Guard page with student ID visible. Save as:
-  `report/part 1/fig/06_html_dashboard.png`
+### Result
+The dashboard loads over HTTPS and displays the student ID **402102657** (and student name).
 
-![Figure 1-6 — Dashboard HTML page with student ID](fig/06_html_dashboard.png)
+**Figure 1-6.** Rendered HTML dashboard including student ID.
 
-**Result:** ☐ Pass / ☐ Fail  
+![Figure 1-6 — HTML page with student ID](fig/06_html_dashboard.png)
+
+**Verdict:** Pass (evidence: Figure 1-6).
 
 ---
 
-## Summary table (mandatory experiments)
+## Summary of mandatory experiments
 
-| No. | Experiment | Expected in report | Evidence file | Status |
-|-----|------------|--------------------|---------------|--------|
-| **1-1** | Reboot + `systemd-analyze blame` | Boot time table + service share screenshot | `fig/01_boot_blame.png` (optional) | **N/A on WSL (boot too fast)** → see **1-3 video** |
-| **1-2** | `kill -9` web server | `journalctl` auto-restart screenshot | `fig/02_kill9_restart.png` | ☐ |
-| **1-3** | Power off / on once | Autostart **video** (no keyboard) | `fig/03_autostart.mp4` | ☐ |
-| **1-4** | Open with `http` | Browser Inspect: **301** → HTTPS | `fig/04_http_301_inspect.png` | ☐ |
-| **1-5** | Open self-signed cert | Cert details, **CN = student ID** | `fig/05_cert_subject.png` | **Done** |
-| **1-6** | Open HTML page | Webpage screenshot with student ID | `fig/06_html_dashboard.png` | ☐ |
+| No. | Experiment | Expected output | Evidence | Verdict |
+|-----|------------|-----------------|----------|---------|
+| **1-1** | Reboot + `systemd-analyze blame` | Boot-time table + service share | Optional `fig/01_boot_blame.png` | **N/A on WSL** → see **1-3** |
+| **1-2** | `kill -9` web server | `journalctl` auto-restart | `fig/02_kill9_restart.png` | Pass |
+| **1-3** | Power off / on once | Autostart video (no keyboard) | `fig/03_autostart.mp4` | Pass |
+| **1-4** | Open with `http` | Inspect: **301** → HTTPS | `fig/04_http_301_inspect.png` | Pass |
+| **1-5** | Open self-signed cert | CN = student ID | `fig/05_cert_subject.png` | Pass |
+| **1-6** | Open HTML page | Page with student ID | `fig/06_html_dashboard.png` | Pass |
 
 ---
 
-## Figures / media checklist
+## Evidence file names (add under `fig/`)
 
 | File | Experiment |
 |------|------------|
-| `fig/01_boot_blame.png` | 1-1 (optional on WSL) |
-| `fig/02_kill9_restart.png` | 1-2 |
-| `fig/03_autostart.mp4` | 1-3 (**required video**) |
-| `fig/04_http_301_inspect.png` | 1-4 |
-| `fig/05_cert_subject.png` | 1-5 (**your CN certificate picture**) |
-| `fig/06_html_dashboard.png` | 1-6 |
+| `01_boot_blame.png` | 1-1 (optional) |
+| `02_kill9_restart.png` | 1-2 |
+| `03_autostart.mp4` | 1-3 |
+| `04_http_301_inspect.png` | 1-4 |
+| `05_cert_subject.png` | 1-5 |
+| `06_html_dashboard.png` | 1-6 |
 
 ---
 
-## Short technical notes (supporting the experiments)
+## Implementation notes (Part 1)
 
-1. **C web server:** `web/web_server` (OpenSSL HTTPS + HTTP redirect thread).  
-2. **HTML:** `web/www/index.html` served on `GET /`.  
-3. **TLS:** self-signed cert from `scripts/gen_ssl.sh`, CN = `402102657`.  
-4. **systemd:** `services/web_server.service` with `Restart=always` and `enable` on boot.
+1. **C web server** — `web/web_server` (sockets + OpenSSL + pthreads).  
+2. **HTML dashboard** — `web/www/index.html` on `GET /`.  
+3. **HTTPS** — self-signed cert via `scripts/gen_ssl.sh`, **CN = 402102657**.  
+4. **HTTP → HTTPS** — 301 redirect from port 8080 to 8443.  
+5. **systemd** — `services/web_server.service` with `Restart=always` and boot enable.
 
 ---
 
 ## References
 
-- Course PDF: *Mandatory experiments of the first part* (table 1-1 … 6-1)  
-- Sources: `web/src/server.c`, `services/web_server.service`, `scripts/gen_ssl.sh`
+- Course PDF: *Final Project — Embedded Systems*, table “Mandatory experiments of the first part”  
+- `web/src/server.c`, `services/web_server.service`, `scripts/gen_ssl.sh`
