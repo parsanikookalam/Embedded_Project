@@ -1,10 +1,14 @@
 # Part 3 — Code & Architecture Explanation
 
-**Project:** Smart Guard System  
-**Student:** Parsa Nikookalam · `402102657`  
-**Scope of Part 3:** Human **detection** (Python), on-stream **overlay**, **email alerts in C**, **MQTT publisher in C**, authenticated **Mosquitto** broker, LWT / QoS 1.
+| Field | Value |
+|-------|--------|
+| Document | Final architecture & code explanation |
+| Companion | `report/part 3/report.md` (mandatory experiments) |
+| Project | Smart Guard System |
+| Student | Parsa Nikookalam · `402102657` |
+| Scope | Detection (Python), overlay, email (C), MQTT (C), Mosquitto auth/LWT |
 
-Part 3 is where “Smart Guard” becomes a sensing appliance. Vision stays in Python; **notification channels are deliberately implemented in C** to match the course language rule.
+Part 3 turns Smart Guard into a sensing appliance. Vision stays in Python; **email and MQTT are implemented in C** to satisfy the course language rule.
 
 ---
 
@@ -147,7 +151,7 @@ Each output frame draws:
 
 Snapshot JPEG `data/latest_detection.jpg` is refreshed for email attachments.
 
-### 4.6 Capture loop (conceptual)
+### 4.6 Capture loop (algorithm)
 
 ```
 loop forever:
@@ -428,14 +432,25 @@ curl -sk -X POST https://127.0.0.1:8443/api/v1/command \
 
 ---
 
-## 15. Summary
+## 15. Conclusion
 
-Part 3 splits responsibilities cleanly:
+Part 3 splits responsibilities as follows:
 
-| Layer | Language | Job |
-|-------|----------|-----|
+| Layer | Language | Responsibility |
+|-------|----------|----------------|
 | Sense + draw | Python | Camera, YOLO/face, MJPEG, files/DB |
-| Decide + notify | C | Email, MQTT, REST façade |
-| Broker | Mosquitto | Authenticated transport + LWT |
+| Decide + notify | C | Email (libcurl), MQTT (libmosquitto), REST façade |
+| Broker | Mosquitto | Authenticated transport + LWT on `…/status` |
 
-That architecture satisfies both the **vision** requirements and the **“core in C”** rule for outbound alerts.
+This meets both the **vision** requirements and the rule that outbound application alerts are implemented in **C**.
+
+---
+
+## 16. Related documents
+
+| Document | Role |
+|----------|------|
+| `report/part 3/report.md` | Mandatory experiments 3-1 … 3-7 |
+| `report/part 3/explain.md` | This file — architecture & code |
+| `report/part 2/explain.md` | REST / telemetry substrate |
+| `README.md` (repo root) | Full-project setup guide |

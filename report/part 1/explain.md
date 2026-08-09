@@ -1,10 +1,14 @@
 # Part 1 — Code & Architecture Explanation
 
-**Project:** Smart Guard System  
-**Student:** Parsa Nikookalam · `402102657`  
-**Scope of Part 1:** Native **C** web server, HTML dashboard, **HTTPS** with self-signed certificate (**CN = student ID**), **HTTP → HTTPS** redirect, **systemd** auto-start.
+| Field | Value |
+|-------|--------|
+| Document | Final architecture & code explanation |
+| Companion | `report/part 1/report.md` (mandatory experiments) |
+| Project | Smart Guard System |
+| Student | Parsa Nikookalam · `402102657` |
+| Scope | C web server, HTML dashboard, HTTPS (CN = student ID), HTTP→HTTPS redirect, systemd |
 
-This document explains *how* Part 1 is structured in the repository and *what each important file does*. Later parts reuse the same C process; Part 1 is the foundation.
+This document is the **finalized** description of Part 1 structure and source code. Later parts extend the same C process; Part 1 is the foundation.
 
 ---
 
@@ -97,10 +101,10 @@ embedded_project/
 
 ```c
 int main(void) {
-    email_alert_start();   /* Part 3 — harmless if email disabled */
+    email_alert_start();   /* Part 3 — no-op path if EMAIL_ENABLED=0 */
     mqtt_pub_start();      /* Part 3 */
     part4_start();         /* Part 4 */
-    start_http_server(0);  /* Part 1 core — never returns while serving */
+    start_http_server(0);  /* Part 1 core — blocks in accept loops */
     return 0;
 }
 ```
@@ -417,13 +421,25 @@ systemctl status web_server --no-pager
 
 ---
 
-## 18. Summary
+## 18. Conclusion
 
-Part 1 is a **minimal embedded HTTPS appliance** written in C:
+Part 1 delivers a **minimal embedded HTTPS appliance** in C:
 
-- Dual listeners (plain HTTP redirect + TLS)  
-- Self-signed identity bound to the **student ID**  
-- Static HTML dashboard from disk  
-- systemd for always-on operation  
+| Property | Implementation |
+|----------|----------------|
+| Dual listeners | HTTP **301** redirect + OpenSSL HTTPS |
+| Identity | Self-signed certificate, **CN = student ID** |
+| UI | `www/index.html` served on `GET /` |
+| Persistence | `web_server.service` with `Restart=always` |
 
-Everything else in Smart Guard hangs off this process and this certificate.
+All later Smart Guard features run inside this same process and certificate boundary.
+
+---
+
+## 19. Related documents
+
+| Document | Role |
+|----------|------|
+| `report/part 1/report.md` | Mandatory experiments 1-1 … 1-6 |
+| `report/part 1/explain.md` | This file — architecture & code |
+| `README.md` (repo root) | Full-project setup guide |

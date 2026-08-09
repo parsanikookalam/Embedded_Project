@@ -1,10 +1,14 @@
 # Part 2 — Code & Architecture Explanation
 
-**Project:** Smart Guard System  
-**Student:** Parsa Nikookalam · `402102657`  
-**Scope of Part 2:** REST APIs in **C**, live **telemetry**, shared person/history state, thin **Swagger/FastAPI gateway**, dashboard widgets that poll the C backend.
+| Field | Value |
+|-------|--------|
+| Document | Final architecture & code explanation |
+| Companion | `report/part 2/report.md` (mandatory experiments) |
+| Project | Smart Guard System |
+| Student | Parsa Nikookalam · `402102657` |
+| Scope | REST APIs in C, live telemetry, shared state, Swagger gateway |
 
-Part 2 does **not** replace the Part 1 server — it **extends** `web/src/server.c` with JSON endpoints and adds a documentation proxy.
+Part 2 does **not** replace the Part 1 server. It **extends** `web/src/server.c` with JSON endpoints and adds a documentation-only proxy.
 
 ---
 
@@ -285,7 +289,7 @@ That calls `uvicorn.run(app, host="0.0.0.0", port=GATEWAY_PORT)` with `GATEWAY_P
 
 ## 8. Dashboard integration (Part 2 UX)
 
-`index.html` JavaScript typically:
+`index.html` JavaScript:
 
 1. Polls `/api/v1/telemetry` every few seconds → fill CPU/temp/RAM cards.  
 2. Polls `/api/v1/persons` → person count widget.  
@@ -380,12 +384,25 @@ xdg-open http://127.0.0.1:8000/docs   # or browser on Windows host
 
 ---
 
-## 16. Summary
+## 16. Conclusion
 
 Part 2 turns the Part 1 HTTPS appliance into a **telemetry- and control-capable REST device**:
 
-- Measurement and JSON APIs live in **C**  
-- Shared files/DB connect vision to the API  
-- Swagger is a **transparent proxy** for documentation and TA demos  
+| Layer | Responsibility |
+|-------|----------------|
+| C (`server.c`, `telemetry.c`, `persons_state.c`) | Measurement, JSON APIs, stream proxy, commands |
+| Shared files / SQLite | Bridge from vision (writer) to API (reader) |
+| FastAPI gateway | OpenAPI docs + transparent proxy only |
 
-That separation satisfies the course rule: *core logic in C; Python only where allowed (vision + thin API docs).*
+This separation matches the course rule: **core logic in C**; Python is limited to allowed roles (later vision + thin API documentation).
+
+---
+
+## 17. Related documents
+
+| Document | Role |
+|----------|------|
+| `report/part 2/report.md` | Mandatory experiments 2-1 … 2-4 |
+| `report/part 2/explain.md` | This file — architecture & code |
+| `report/part 1/explain.md` | HTTPS server foundation |
+| `README.md` (repo root) | Full-project setup guide |

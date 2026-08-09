@@ -1,10 +1,14 @@
 # Part 4 — Code & Architecture Explanation
 
-**Project:** Smart Guard System  
-**Student:** Parsa Nikookalam · `402102657`  
-**Scope of Part 4:** **Guard** (anti-theft) mode, **black box** history, **software watchdog**, **adaptive thermal** management — coordinated in **C**, with Python consuming thermal hints and writing heartbeats / SQLite events.
+| Field | Value |
+|-------|--------|
+| Document | Final architecture & code explanation |
+| Companion | `report/part 4/report.md` (mandatory experiments) |
+| Project | Smart Guard System |
+| Student | Parsa Nikookalam · `402102657` |
+| Scope | Guard, black box, software watchdog, adaptive thermal (C coordinator) |
 
-Part 4 is a coordinator layer on top of Parts 1–3. It does not replace the web server or detector; it **arms policies** around the same shared files and APIs.
+Part 4 is a **policy coordinator** on top of Parts 1–3. It does not replace the web server or detector; it applies Guard / watchdog / thermal / recording rules on the same shared files and APIs.
 
 ---
 
@@ -231,10 +235,10 @@ Detector writes `data/vision_heartbeat.json`:
 - `touch_ts=True` → update `ts` (healthy real frame, or idle with camera off).  
 - `touch_ts=False` → keep previous `ts` while `mode` stays non-idle (opening camera, waiting for usbipd, read failures).  
 
-Watchdog only arms when `mode != "idle"`. If `ts` were refreshed during stalled “capturing” waits, the watchdog would never fire — that bug was fixed by using `touch_ts=False` on those paths.
+Watchdog only evaluates when `mode != "idle"`. Stalled camera paths therefore call `write_heartbeat("capturing", touch_ts=False)` so `ts` ages and the watchdog can fire. Successful frames use `touch_ts=True`.
 
-| mode (typical) | Meaning |
-|----------------|---------|
+| mode | Meaning |
+|------|---------|
 | `idle` | Camera OFF — watchdog does **not** treat this as tampering |
 | `capturing` (non-idle) | Camera intended ON — `ts` must keep advancing on real frames |
 
@@ -457,13 +461,26 @@ journalctl -u web_server -u human_detector -f
 
 ---
 
-## 17. Summary
+## 17. Conclusion
 
-Part 4 implements four embedded “appliance” behaviours in one C coordinator thread:
+Part 4 implements four appliance behaviours in one C coordinator thread (`features_part4.c`):
 
-1. **Guard** — count-increase anti-theft alarms (mail + MQTT).  
-2. **Black box** — bounded SQLite history exposed over REST.  
-3. **Watchdog** — stale frame heartbeat → tamper mail + service restart.  
-4. **Thermal** — hysteresis throttling via shared JSON without freezing the stream.
+| Feature | Behaviour |
+|---------|-----------|
+| **Guard** | Person-count **increase** → fast email + MQTT `home/<ID>/alarm` |
+| **Black box** | Circular SQLite history (capacity 500) via `/api/v1/blackbox` |
+| **Watchdog** | Stale non-idle heartbeat → tamper email + `systemctl restart human_detector` |
+| **Thermal** | ≥85 °C throttle / &lt;78 °C clear via `thermal_control.json` (YOLO skip, stream stays live) |
 
-Together they complete the Smart Guard System as specified in the course PDF’s fourth part.
+Together with Parts 1–3, this completes the Smart Guard System as specified in the course PDF.
+
+---
+
+## 18. Related documents
+
+| Document | Role |
+|----------|------|
+| `report/part 4/report.md` | Mandatory experiments 4-1 … 4-4 |
+| `report/part 4/explain.md` | This file — architecture & code |
+| `report/part 3/explain.md` | Vision / email / MQTT substrate |
+| `README.md` (repo root) | Full-project setup guide |
