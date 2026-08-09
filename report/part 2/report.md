@@ -211,17 +211,13 @@ curl -sk https://127.0.0.1:8443/api/v1/telemetry | tee "report/part 2/fig/load_a
 | Max under burst | **0.0415** (~41.5 ms) |
 | Increase (mean − min) | ≈ **0.009** s (~9 ms) |
 
-**Figure 2-3a.** Optional: bar/line chart of latencies from `load_latencies.txt`.
+**Figure 2-3.** Bar/line chart of latencies from `load_latencies.txt`.
 
-![Figure 2-3a — Telemetry request latency under burst](fig/04_telemetry_latency.png)
-
-**Figure 2-3b.** Terminal / dashboard screenshot during or after the burst (optional but useful).
-
-![Figure 2-3b — Load test evidence](fig/05_load_test_terminal.png)
+![Figure 2-3 — Telemetry request latency under burst](fig/04_telemetry_latency.png)
 
 **Discussion:** Under concurrent telemetry GETs, CPU usage rose briefly (**+2.16%**); temperature did not move in the before/after snapshots (**58.85 °C**); system memory change was small (**+0.27%**). Burst latencies stayed in the **~20–42 ms** band (mean **~29 ms**), so contention on accept/TLS/telemetry reads is visible but modest.
 
-**Verdict:** Pass (evidence: tables + Figures 2-3a/2-3b).
+**Verdict:** Pass (evidence: tables + Figure 2-3).
 
 ---
 
@@ -286,7 +282,7 @@ curl -sk https://127.0.0.1:8443/api/v1/telemetry
 |-----|------------|-----------------|----------------|---------|
 | **2-1** | Temp in idle / stream / stream+detect (30 s, 5 min) | 3-curve graph + max-temp table + final detect screenshot | `01_temp_vs_time.png` (idle only so far), `02_detect_final_state.png` | **Incomplete** — need stream/detect CSV + full plot + screenshot |
 | **2-2** | C memory during 5 min stream (every 5 s) | Memory graph + leak analysis | `03_mem_vs_time.png`, `mem_web_server.csv` | **Pass** (RSS flat 17512 KB) |
-| **2-3** | 50 concurrent curls to `/api/v1/telemetry` (~30 s) | Δ temp / CPU / mem + latency increase | `04_telemetry_latency.png`, `load_*.json/txt` | **Pass** (numbers filled); optional `05_…` screenshot |
+| **2-3** | 50 concurrent curls to `/api/v1/telemetry` (~30 s) | Δ temp / CPU / mem + latency increase | `04_telemetry_latency.png`, `load_*.json/txt` | **Pass** |
 | **2-4** | Disconnect network 2 min during stream, then reconnect | Behaviour + logs + recovery | `06_…`, `07_…` | **Incomplete** — do later |
 
 ---
@@ -301,7 +297,6 @@ curl -sk https://127.0.0.1:8443/api/v1/telemetry
 | `03_mem_vs_time.png` | 2-2 |
 | `mem_web_server.csv` | 2-2 raw data (optional) |
 | `04_telemetry_latency.png` | 2-3 |
-| `05_load_test_terminal.png` | 2-3 |
 | `06_network_disconnect_logs.png` | 2-4 |
 | `07_network_recovery.png` | 2-4 |
 
