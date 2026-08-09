@@ -43,44 +43,31 @@ Expected report output:
 ### Procedure
 Ensure services are running (`web_server`, `human_detector`). Prefer Host CPU temp helper on Windows if WSL sysfs temp is unavailable.
 
-**Common sample loop** (run once per state; duration 5 minutes ≈ 11 samples at 30 s):
+Use the project sampler (writes real CSV rows from `/api/v1/telemetry`):
 
 ```bash
-OUT="report/part 2/fig/temp_STATE.csv"   # replace STATE with idle / stream / detect
-echo "t_sec,cpu_temp,cpu_usage_percent,mem_used_percent" > "$OUT"
-for i in $(seq 0 10); do
-  curl -sk https://127.0.0.1:8443/api/v1/telemetry
-  # parse cpu_temp into CSV (or copy from dashboard)
-  sleep 30
-done
+cd ~/embedded_project
+# fix Windows line endings once if needed:
+sed -i 's/\r$//' scripts/sample_temp_csv.sh
+
+# (a) Idle — camera OFF, do not open stream (~5 min)
+bash scripts/sample_temp_csv.sh idle
+
+# (b) Stream only — script turns camera ON; open dashboard stream; stay out of view (~5 min)
+bash scripts/sample_temp_csv.sh stream
+
+# (c) Stream + detection — open stream and stand in front of camera (~5 min)
+bash scripts/sample_temp_csv.sh detect
+
+# Plot three curves
+.venv/bin/python scripts/plot_part2_figs.py
 ```
 
-**State (a) — Idle**
+Output files:
 
-```bash
-curl -sk -X POST https://127.0.0.1:8443/api/v1/command \
-  -H 'Content-Type: application/json' \
-  -d '{"cmd":"camera_off"}'
-# Do not open the live stream. Run the 5-minute sample loop → temp_idle.csv
-```
-
-**State (b) — Stream only**
-
-```bash
-curl -sk -X POST https://127.0.0.1:8443/api/v1/command \
-  -H 'Content-Type: application/json' \
-  -d '{"cmd":"camera_on"}'
-# Open https://127.0.0.1:8443/ and keep the stream visible.
-# Stay out of camera view. Run 5-minute sample → temp_stream.csv
-```
-
-**State (c) — Stream + active detection**
-
-```bash
-# Camera already ON; keep stream open; stand in front of the camera so count ≥ 1.
-# Run 5-minute sample → temp_detect.csv
-# At the end, screenshot the dashboard (boxes + student ID + count).
-```
+- `report/part 2/fig/temp_idle.csv`
+- `report/part 2/fig/temp_stream.csv`
+- `report/part 2/fig/temp_detect.csv`
 
 Plot the three `cpu_temp` series on one chart (Excel, Python `matplotlib`, etc.).
 

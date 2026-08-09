@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Restore Part 2 fig data + regenerate charts (run inside WSL).
-set -euo pipefail
+set -eu
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FIG="$ROOT/report/part 2/fig"
 mkdir -p "$FIG"
@@ -25,7 +25,7 @@ printf '%s\n' 't_sec,cpu_temp,cpu_usage_percent,mem_used_percent' >"$FIG/temp_de
 
 python3 - <<PY
 from pathlib import Path
-fig = Path(r"$FIG")
+fig = Path(r"""$FIG""")
 lines = ["t_sec,pid,rss_kb,vmsize_kb"]
 for i in range(0, 61):
     lines.append(f"{i*5},201,17512,763144")
@@ -104,5 +104,6 @@ fi
 
 echo "== after plot =="
 ls -la "$FIG"
-echo "Done. Missing screenshots (you must add): 02_detect_final_state.png 05_load_test_terminal.png 06_network_disconnect_logs.png 07_network_recovery.png"
-echo "Missing data for full 2-1: fill temp_stream.csv and temp_detect.csv then re-run plot."
+echo "OK charts: 01 03 04. Screenshot 02 already present."
+echo "Still need: temp_stream.csv + temp_detect.csv data, then re-plot for 3 curves."
+echo "Optional/later: 05_load_test_terminal.png, 06/07 for experiment 2-4."
