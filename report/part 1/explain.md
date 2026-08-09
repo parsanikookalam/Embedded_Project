@@ -4,6 +4,7 @@
 |-------|--------|
 | Document | Final architecture & code explanation |
 | Companion | `report/part 1/report.md` (mandatory experiments) |
+| Also covers | PDF package: architecture, code, experiment tables/figures, results analysis, problems & solutions |
 | Project | Smart Guard System |
 | Student | Parsa Nikookalam · `402102657` |
 | Scope | C web server, HTML dashboard, HTTPS (CN = student ID), HTTP→HTTPS redirect, systemd |
@@ -118,6 +119,26 @@ int main(void) {
 3. Creates **SSL_CTX**, loads `www/server.crt` + `www/server.key`.  
 4. Binds HTTPS socket and accepts clients forever.
 
+### 4.1 Full `main.c`
+
+```c
+/* web/src/main.c */
+#include "http_server.h"
+#include "email_alert.h"
+#include "mqtt_pub.h"
+#include "features_part4.h"
+
+int main(void) {
+    email_alert_start();   /* Part 3 — background SMTP thread */
+    mqtt_pub_start();      /* Part 3 — background MQTT thread */
+    part4_start();         /* Part 4 — Guard / watchdog / thermal */
+    start_http_server(0);  /* Part 1 — HTTP redirect + HTTPS (blocks) */
+    return 0;
+}
+```
+
+Order matters: worker threads start **before** the blocking accept loops so email/MQTT/Part4 are alive while the server runs.
+
 ---
 
 ## 5. Configuration loading
@@ -162,7 +183,44 @@ If `HTTPS_PORT == 443`, the `Location` omits the port (standard URL form).
 
 Using the `Host` header (instead of hard-coding `127.0.0.1`) keeps redirects correct when the student opens the page via LAN IP or hostname.
 
-### 6.4 Code anchors
+### 6.4 Source: HTTP 301 redirect (`server.c`)
+
+```c
+/* http_redirect_thread — one client on the plain-HTTP port */
+static void *http_redirect_thread(void *arg)
+{
+    int new_socket = *(int *)arg;
+    free(arg);
+    char buffer[BUFFER_SIZE] = {0};
+    (void)read(new_socket, buffer, BUFFER_SIZE - 1);
+
+    char host[128] = "127.0.0.1";
+    char *h = strstr(buffer, "Host:");
+    if (!h)
+        h = strstr(buffer, "host:");
+    if (h) {
+        sscanf(h, "%*[^:]: %127s", host);
+        char *colon = strchr(host, ':');
+        if (colon)
+            *colon = '\0';
+    }
+
+    char response[320];
+    /* WSL uses :8443 — include port in Location */
+    snprintf(response, sizeof(response),
+             "HTTP/1.1 301 Moved Permanently\r\n"
+             "Location: https://%s:%d/\r\n"
+             "Connection: close\r\n\r\n",
+             host, g_https_port);
+    (void)write(new_socket, response, strlen(response));
+    close(new_socket);
+    return NULL;
+}
+```
+
+The accept loop for HTTP runs in `start_http_redirect_server()` on a detached pthread; each accepted socket gets its own `http_redirect_thread`.
+
+### 6.5 Code anchors
 
 | Symbol | Location |
 |--------|----------|
@@ -186,7 +244,69 @@ Sequence inside `start_http_server()` (as in `server.c`):
 
 Comment in code: *Do NOT fork() after mqtt/email/part4 threads start.*
 
-### 7.2 Per-client worker
+### 7.2 Source: TLS accept + client thread (`server.c`)
+
+```c
+/* Each HTTPS connection — detached pthread */
+static void *https_client_thread(void *arg)
+{
+    https_client_arg_t *ca = (https_client_arg_t *)arg;
+    int fd = ca->fd;
+    SSL_CTX *ctx = ca->ctx;
+    free(ca);
+
+    SSL *ssl = SSL_new(ctx);
+    if (!ssl) {
+        close(fd);
+        return NULL;
+    }
+    SSL_set_fd(ssl, fd);
+    if (SSL_accept(ssl) > 0)
+        handle_https_client(ssl);   /* route GET /, APIs, stream, … */
+    SSL_shutdown(ssl);
+    SSL_free(ssl);
+    close(fd);
+    return NULL;
+}
+
+void start_http_server(int ignore_port) {
+    load_config();
+    /* spawn HTTP redirect pthread … */
+    SSL_CTX *ctx = SSL_CTX_new(TLS_server_method());
+    SSL_CTX_use_certificate_file(ctx, "www/server.crt", SSL_FILETYPE_PEM);
+    SSL_CTX_use_PrivateKey_file(ctx, "www/server.key", SSL_FILETYPE_PEM);
+    /* bind/listen on g_https_port … */
+    while (1) {
+        new_socket = accept(server_fd, …);
+        https_client_arg_t *ca = malloc(sizeof(*ca));
+        ca->fd = new_socket;
+        ca->ctx = ctx;
+        pthread_create(&th, &attr, https_client_thread, ca);  /* detached */
+    }
+}
+```
+
+### 7.3 Source: send JSON/HTML helper
+
+```c
+static void send_ssl_response(SSL *ssl, int status, const char *status_text,
+                              const char *content_type, const char *body) {
+    char header[512];
+    int body_len = (int)strlen(body);
+    int n = snprintf(header, sizeof(header),
+                     "HTTP/1.1 %d %s\r\n"
+                     "Content-Type: %s\r\n"
+                     "Content-Length: %d\r\n"
+                     "Connection: close\r\n"
+                     "Access-Control-Allow-Origin: *\r\n"
+                     "\r\n",
+                     status, status_text, content_type, body_len);
+    SSL_write(ssl, header, n);
+    SSL_write(ssl, body, body_len);
+}
+```
+
+### 7.4 Per-client worker (routing overview)
 
 Each TLS session is handled on a **detached pthread**:
 
@@ -194,7 +314,7 @@ Each TLS session is handled on a **detached pthread**:
 - Route by path (`path_match`).  
 - For Part 1’s primary demo: missing API path → fall through to **serve `www/index.html`**.
 
-### 7.3 Serving the HTML dashboard
+### 7.5 Serving the HTML dashboard
 
 Logic at the end of the HTTPS request handler:
 
@@ -211,7 +331,24 @@ Connection: close
 
 4. `SSL_write` body; free buffer; close SSL/socket.
 
-### 7.4 Why `Connection: close`?
+### 7.6 Source: serving `index.html`
+
+```c
+/* End of handle_https_client — default route */
+FILE *fp = fopen("www/index.html", "r");
+/* … fread entire file into file_buf … */
+char http_header[256];
+snprintf(http_header, sizeof(http_header),
+         "HTTP/1.1 200 OK\r\n"
+         "Content-Type: text/html; charset=utf-8\r\n"
+         "Content-Length: %ld\r\n"
+         "Connection: close\r\n\r\n",
+         file_size);
+SSL_write(ssl, http_header, hn);
+SSL_write(ssl, file_buf, (int)file_size);
+```
+
+### 7.7 Why `Connection: close`?
 
 Simplifies the custom server (no keep-alive / pipelining). Fine for a course appliance; browsers open new connections for assets/API polls.
 
@@ -222,26 +359,31 @@ Simplifies the custom server (no keep-alive / pipelining). Fine for a course app
 ### 8.1 What the script does
 
 1. Reads `STUDENT_ID` from `config.env` **without** `source` (safe parsing).  
-2. Writes a temporary OpenSSL config with:
+2. Writes a temporary OpenSSL config with CN / O / C / SAN.  
+3. Runs `openssl req -x509 …`.  
+4. `chmod 600` on the private key.  
 
-| Field | Value |
-|-------|--------|
-| CN | student ID (e.g. `402102657`) |
-| O | `Smart Guard System` |
-| C | `IR` |
-| SAN | `DNS:localhost`, `DNS:<STUDENT_ID>`, `IP:127.0.0.1` |
-
-3. Runs:
+### 8.2 Source: `scripts/gen_ssl.sh` (core)
 
 ```bash
+STUDENT_ID="$(grep -E '^STUDENT_ID=' "$ROOT/config.env" | head -n1 \
+  | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r')"
+
+# openssl config fragment sets:
+#   CN = ${STUDENT_ID}
+#   O  = Smart Guard System
+#   subjectAltName = DNS:localhost, IP:127.0.0.1, …
+
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout web/www/server.key -out web/www/server.crt -config …
+  -keyout "$OUT/server.key" \
+  -out "$OUT/server.crt" \
+  -config "$CFG"
+
+chmod 600 "$OUT/server.key"
+openssl x509 -in "$OUT/server.crt" -noout -subject
 ```
 
-4. `chmod 600` on the private key.  
-5. Prints `-subject` for verification.
-
-### 8.2 Course requirement
+### 8.3 Course requirement
 
 Browsers will warn (self-signed). The **Certificate Viewer** must show **Common Name = student ID** — that is the Part 1 experiment evidence.
 
@@ -323,7 +465,26 @@ Produces `./web_server`. systemd’s `WorkingDirectory` must be `…/web` so rel
 | `RestartSec=3` | Brief backoff |
 | `WantedBy=multi-user.target` | Enable on boot |
 
-### 11.2 Install pattern
+### 11.2 Source: unit file excerpt (`services/web_server.service`)
+
+```ini
+[Unit]
+Description=Smart Guard C Web Server (HTTP redirect + HTTPS REST)
+After=network.target human_detector.service mosquitto_smartguard.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/parsa/embedded_project/web
+EnvironmentFile=/home/parsa/embedded_project/config.env
+ExecStart=/home/parsa/embedded_project/web/web_server
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### 11.3 Install pattern
 
 ```bash
 sudo cp services/web_server.service /etc/systemd/system/
@@ -331,7 +492,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now web_server
 ```
 
-### 11.3 WSL autostart
+### 11.4 WSL autostart
 
 WSL must run with systemd enabled (`[boot] systemd=true` in `/etc/wsl.conf`). Helper: `scripts/enable_wsl_autostart.sh`. Experiment **1-3** video uses `wsl --shutdown` then reopen Ubuntu without typing start commands.
 
@@ -421,7 +582,62 @@ systemctl status web_server --no-pager
 
 ---
 
-## 18. Conclusion
+## 18. PDF report package (what this part must contain)
+
+Per the course PDF, the Part 1 submission package should include **architecture**, **code explanation**, **all experiment tables/figures**, **results analysis**, and **problems & how they were solved**. Mapping:
+
+| PDF expectation | Where it lives |
+|-----------------|----------------|
+| Architecture | Sections 2–3 of this `explain.md` |
+| Code explanation | Sections 4–12 of this `explain.md` (with source excerpts) |
+| Experiment tables & charts/screenshots | `report/part 1/report.md` + files under `fig/` |
+| Results analysis | Section 20 below + per-experiment verdicts in `report.md` |
+| Problems & solutions | Section 21 below |
+
+### 18.1 Mandatory experiments — tables & figures checklist
+
+| No. | Experiment (PDF) | Required table / chart / media | File in `fig/` |
+|-----|------------------|--------------------------------|----------------|
+| **1-1** | Boot + `systemd-analyze blame` | Boot-time table + service share screenshot | `01_boot_blame.png` (optional on WSL) |
+| **1-2** | `kill -9` web server | `journalctl` auto-restart screenshot | `02_kill9_restart.png` |
+| **1-3** | Power off / on once | Autostart **video** (no keyboard) | `03_autostart.mp4` |
+| **1-4** | Open with `http` | Browser Inspect: **301** → HTTPS | `04_http_301_inspect.png` |
+| **1-5** | Open self-signed cert | Cert details, **CN = student ID** | `05_cert_subject.png` |
+| **1-6** | Open HTML page | Page with student ID visible | `06_html_dashboard.png` |
+
+Full write-up of each experiment (procedure + verdict): **`report/part 1/report.md`**.
+
+---
+
+## 19. Results analysis (Part 1)
+
+| Experiment | Expected outcome | Analysis |
+|------------|------------------|----------|
+| **1-1** | Blame table of boot cost | On **WSL**, boot is too fast for a meaningful Orange Pi–style table. Autostart proof is moved to **1-3** video. |
+| **1-2** | Service comes back after `SIGKILL` | `Restart=always` in systemd replaces the PID; logs show failure then new `ExecStart`. Proves embedded “appliance” resilience. |
+| **1-3** | App starts without typing start commands | After `wsl --shutdown` + reopen, `web_server` is already active — validates enable-on-boot. |
+| **1-4** | HTTP → HTTPS with **301** | Redirect thread parses `Host` and issues `Location: https://…:8443/`. Inspect Network confirms permanent redirect. |
+| **1-5** | CN = `402102657` | `gen_ssl.sh` sets Distinguished Name CN to `STUDENT_ID`; browser Certificate Viewer proves identity binding. |
+| **1-6** | Dashboard shows student ID | HTML served over TLS; page loads config/ID for the course identity check. |
+
+**Overall:** Part 1 establishes a secure, auto-started C front-end. The only platform exception is **1-1** (WSL boot), which is explicitly documented and covered by **1-3**.
+
+---
+
+## 20. Problems encountered and how they were solved (Part 1)
+
+| # | Problem | Severity | Cause | Solution |
+|---|---------|----------|-------|----------|
+| 1 | Ports **80/443** unavailable on WSL | High | Windows reserves privileged ports | Use `HTTP_PORT=8080`, `HTTPS_PORT=8443` in `config.env`; same redirect/TLS design as Orange Pi |
+| 2 | `fork()` per HTTPS request crashed with background workers | High | Fork after MQTT/email threads → undefined shared state | Switched to **detached pthreads** per client (`https_client_thread`); comment in `server.c`: do not fork after workers start |
+| 3 | Browser warns on certificate | Low (expected) | Self-signed cert (course requirement) | Accept exception for demo; still prove CN in Certificate Viewer |
+| 4 | WSL does not behave like board cold boot | Medium (exp 1-1) | Lightweight VM start | Document N/A for blame table; provide **1-3** autostart video instead |
+| 5 | Relative paths fail if cwd wrong | Medium | Cert/HTML looked up as `www/…` | systemd `WorkingDirectory=…/web`; always run binary from `web/` |
+| 6 | `config.env` name with spaces broke `source` | Medium | Unquoted `STUDENT_NAME=…` | Quote name; `gen_ssl.sh` parses with `grep/cut` instead of `source` |
+
+---
+
+## 21. Conclusion
 
 Part 1 delivers a **minimal embedded HTTPS appliance** in C:
 
@@ -436,7 +652,7 @@ All later Smart Guard features run inside this same process and certificate boun
 
 ---
 
-## 19. Related documents
+## 22. Related documents
 
 | Document | Role |
 |----------|------|

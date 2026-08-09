@@ -4,6 +4,7 @@
 |-------|--------|
 | Document | Final architecture & code explanation |
 | Companion | `report/part 4/report.md` (mandatory experiments) |
+| Also covers | PDF package: architecture, code, experiment videos/images, results analysis, problems & solutions |
 | Project | Smart Guard System |
 | Student | Parsa Nikookalam · `402102657` |
 | Scope | Guard, black box, software watchdog, adaptive thermal (C coordinator) |
@@ -110,6 +111,24 @@ pthread_create(…, part4_thread, NULL);
 
 On entry, the thread loads thresholds from `config.env` and writes an initial `thermal_control.json` with throttle level 0.
 
+### 4.1 Source: starting the coordinator
+
+```c
+/* web/src/features_part4.c */
+void part4_start(void)
+{
+    pthread_t th;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    if (pthread_create(&th, &attr, part4_thread, NULL) != 0)
+        fprintf(stderr, "[part4] failed to start thread\n");
+    pthread_attr_destroy(&attr);
+}
+```
+
+The loop body runs Guard → Watchdog → Thermal once per second (`sleep(1)`).
+
 ---
 
 ## 5. Feature 4-1 — Guard (anti-theft) mode
@@ -142,7 +161,53 @@ prev_count = count;
 
 This matches “someone new appeared / count increased” anti-theft semantics better than “any time count ≥ 1”.
 
-### 5.3 Actions on fire
+### 5.3 Source: Guard edge (`features_part4.c`)
+
+```c
+/* ---- 4.1 Guard / anti-theft ----
+ * Fast alarm on any INCREASE in person count (0→1, 1→2, …).
+ */
+if (guard_is_armed() && count > prev_count) {
+    if (now - last_guard_mail >= 2) {
+        snprintf(body, sizeof(body),
+                 "GUARD ALARM (anti-theft)\nStudent ID: %s\n"
+                 "Persons: %d → %d (increase)\nCPU temp: %.2f C\n"
+                 "Timestamp: %ld\nMQTT topic: home/%s/alarm\n",
+                 g_student_id, prev_count, count, temp, now, g_student_id);
+        email_send_event(subj, body, 1);          /* attach photo */
+        mqtt_publish_alarm(count, temp, now);     /* home/<ID>/alarm */
+        last_guard_mail = now;
+    }
+}
+prev_count = count;
+```
+
+Alarm publish (`mqtt_pub.c`):
+
+```c
+int mqtt_publish_alarm(int count, float cpu_temp, long timestamp)
+{
+    snprintf(topic, sizeof(topic), "home/%s/alarm", g_student);
+    snprintf(payload, sizeof(payload),
+             "{\"alarm\":true,\"count\":%d,\"cpu_temp\":%.2f,\"timestamp\":%ld}",
+             count, cpu_temp, timestamp);
+    return mosquitto_publish(g_mosq, NULL, topic, (int)strlen(payload), payload, 1, false);
+}
+```
+
+Guard persistence (`guard_state.c`):
+
+```c
+#define GUARD_PATH "../data/guard_state.json"
+
+static void write_file_unlocked(int armed)
+{
+    fprintf(fp, "{\"armed\":%d}\n", armed ? 1 : 0);
+    rename(GUARD_TMP, GUARD_PATH);
+}
+```
+
+### 5.4 Actions on fire
 
 1. Build text body with student ID, old→new count, CPU temp, timestamp.  
 2. `email_send_event(…, attach_photo=1)` — **fast** path (min gap ~**2 s** between Guard mails).  
@@ -185,7 +250,28 @@ On detection updates, `human_detector.py` calls `append_history(...)`:
 
 Database file: `data/history.db`.
 
-### 6.2 Reader (C)
+### 6.2 Source: circular buffer writer (`human_detector.py`)
+
+```python
+def append_history(count: int, ts: int, *, bump_total: bool = False) -> None:
+    conn = sqlite3.connect(HISTORY_DB)
+    conn.execute(
+        "INSERT INTO detections (count, timestamp) VALUES (?, ?)",
+        (int(count), int(ts)),
+    )
+    if bump_total and int(count) > 0:
+        conn.execute(
+            "UPDATE meta SET value = value + 1 WHERE key='total_human_events'"
+        )
+    conn.execute(f"""
+        DELETE FROM detections WHERE id NOT IN (
+            SELECT id FROM detections ORDER BY id DESC LIMIT {BLACKBOX_CAPACITY}
+        )
+    """)
+    conn.commit()
+```
+
+### 6.3 Reader (C)
 
 `persons_state.c`:
 
@@ -242,16 +328,18 @@ Watchdog only evaluates when `mode != "idle"`. Stalled camera paths therefore ca
 | `idle` | Camera OFF — watchdog does **not** treat this as tampering |
 | `capturing` (non-idle) | Camera intended ON — `ts` must keep advancing on real frames |
 
-### 7.2 Watchdog logic (C)
+### 7.2 Source: watchdog branch (`features_part4.c`)
 
 ```c
-if (watchdog_is_enabled() && read_heartbeat(&hb_ts, mode, …) == 0) {
-    age = now - hb_ts;
-    watching = (strcmp(mode, "idle") != 0);
-    if (watching && age > WATCHDOG_SEC && age < 3600) {
-        email_send_event("… camera tampering …");
-        system("systemctl restart human_detector");
-        /* also rate-limit emails ~45s */
+if (watchdog_is_enabled() && read_heartbeat(&hb_ts, mode, sizeof(mode)) == 0) {
+    long age = (hb_ts > 0) ? (now - hb_ts) : 0;
+    int watching = (strcmp(mode, "idle") != 0);
+    if (watching && hb_ts > 0 && age > g_watchdog_sec && age < 3600) {
+        if (now - last_watch_mail >= 45) {
+            email_send_event("[Smart Guard] WARNING — camera tampering", body, 0);
+            system("systemctl restart human_detector >/dev/null 2>&1");
+            last_watch_mail = now;
+        }
     }
 }
 ```
@@ -303,7 +391,43 @@ Hysteresis avoids flapping around a single point.
 
 Level 2 is chosen when `temp >= THERMAL_TEMP_C + 8` (hotter band).
 
-### 8.3 Detector side
+### 8.3 Source: write control file + throttle decision (`features_part4.c`)
+
+```c
+static void write_thermal_control(int level, float temp)
+{
+    int yolo = 640;
+    int detect_every = 1;
+    if (level >= 2) {
+        yolo = 416;
+        detect_every = 3;
+    } else if (level == 1) {
+        yolo = 640;
+        detect_every = 2;
+    }
+    fprintf(fp,
+            "{\"throttle_level\":%d,\"cpu_temp\":%.2f,\"yolo_input\":%d,"
+            "\"detect_every\":%d,\"frame_sleep_ms\":0}\n",
+            level, temp, yolo, detect_every);
+}
+
+/* in part4_thread: */
+if (thermal_is_enabled() && temp > 0) {
+    int want = throttle_level;
+    if (temp >= g_thermal_on)
+        want = (temp >= g_thermal_on + 8.0f) ? 2 : 1;
+    else if (temp <= g_thermal_off)
+        want = 0;
+    if (want != throttle_level) {
+        throttle_level = want;
+        write_thermal_control(throttle_level, temp);
+        if (throttle_level > 0)
+            email_send_event("[Smart Guard] Thermal throttle active", body, 0);
+    }
+}
+```
+
+### 8.4 Detector side
 
 Each loop iteration:
 
@@ -315,17 +439,17 @@ run_detect = (frame_i % detect_every) == 0
 
 Overlay may show `THR{level} skip={detect_every}`.
 
-### 8.4 Email on enter
+### 8.5 Email on enter
 
 When throttle level becomes &gt; 0, C sends a thermal notification (rate-limited ~60 s).
 
-### 8.5 Enable flag
+### 8.6 Enable flag
 
 `thermal_on` / `thermal_off` → `data/thermal_state.json` + `GET /api/v1/thermal`.  
 **Default: enabled** if the file does not exist.  
 If disabled while throttling, coordinator forces level 0 and rewrites `thermal_control.json`.
 
-### 8.6 Stress tools for experiment 4-4
+### 8.7 Stress tools for experiment 4-4
 
 ```bash
 stress-ng --cpu 0 --timeout 300s &
@@ -461,7 +585,73 @@ journalctl -u web_server -u human_detector -f
 
 ---
 
-## 17. Conclusion
+## 17. PDF report package (what this part must contain)
+
+Per the course PDF, Part 4 must include **architecture**, **code explanation**, **all experiment videos/images**, **results analysis**, and **problems & solutions**.
+
+| PDF expectation | Where it lives |
+|-----------------|----------------|
+| Architecture | Sections 2–3 of this `explain.md` |
+| Code explanation | Sections 4–12 (Guard, black box, watchdog, thermal) with source excerpts |
+| Experiment media | `report/part 4/report.md` + `fig/` |
+| Results analysis | Section 18 below |
+| Problems & solutions | Section 19 below |
+
+### 17.1 Mandatory experiments — tables & figures checklist
+
+| No. | Experiment (PDF) | Required output | Files in `fig/` |
+|-----|------------------|-----------------|-----------------|
+| **4-1** | Guard mode | **Video** + images of operation | `01_guard_mode.mp4`, `02_guard_dashboard.png`, `03_guard_alarm.png` |
+| **4-2** | Black box | Image of DB / API events | `04_blackbox_events.png` |
+| **4-3** | Software watchdog | Disconnect camera; **video** + image of reaction | `05_watchdog.mp4`, `06_watchdog_evidence.png` |
+| **4-4** | Adaptive thermal | Raise CPU with Linux tools; functional images | `07_thermal_throttle.png`, `08_thermal_demo.png` |
+
+### 17.2 Example evidence tables
+
+**4-2 — Black box snapshot**
+
+| Field | Example |
+|-------|---------|
+| `total_human_events` | from `/api/v1/blackbox` |
+| `stored` | current rows (≤ 500) |
+| `capacity` | 500 |
+
+**4-4 — Thermal phases**
+
+| Phase | Temp | `throttle_level` | `detect_every` |
+|-------|------|------------------|----------------|
+| Cool | &lt; 78 °C | 0 | 1 |
+| Hot | ≥ 85 °C | 1 or 2 | 2 or 3 |
+| Clear | falling &lt; 78 | 0 | 1 |
+
+---
+
+## 18. Results analysis (Part 4)
+
+| Experiment | Expected outcome | Interpretation |
+|------------|------------------|----------------|
+| **4-1** | Count increase → email + MQTT `…/alarm` while Guard armed | Edge trigger (not “always while count≥1”) gives fast anti-theft without waiting Part 3’s 30 s debounce |
+| **4-2** | Events remain in SQLite after count returns to 0 | Circular buffer = bounded “flight recorder” for review |
+| **4-3** | After &gt;30 s without frames (camera disconnected) → tamper mail + detector restart | Heartbeat `ts` must **not** refresh on failed reads (`touch_ts=False`) |
+| **4-4** | Under stress heat, overlay shows `THR` / skip; stream stays live | Skipping YOLO beats sleeping the pipeline; hysteresis 85/78 avoids flap |
+
+---
+
+## 19. Problems encountered and how they were solved (Part 4)
+
+| # | Problem | Severity | Cause | Solution |
+|---|---------|----------|-------|----------|
+| 1 | Watchdog never emailed | **Severe** | Heartbeat `ts` updated even when frames failed / idle spin | Only `touch_ts=True` on real frames; stalled paths use `touch_ts=False` |
+| 2 | Thermal throttle **froze** MJPEG | **Severe** | Heavy `sleep` / tiny resolution in pipeline | Write `detect_every` + mild `yolo_input`; **`frame_sleep_ms=0`** |
+| 3 | Guard vs Part 3 email conflict confusion | Medium | Two email paths | Document: presence debounce ~30 s; Guard on **count increase** ~2 s gap |
+| 4 | Camera disconnect leaves dead OpenCV handle | High | USB/usbipd detach | Watchdog `systemctl restart human_detector`; UI Camera OFF/ON |
+| 5 | Hard to reach 85 °C on some demos | Medium | Cool laptop / WSL temp source | Keep HostCpuTemp running; optional temporary lower `THERMAL_TEMP_C` for demo (note in report) |
+| 6 | Black box vs history confusion | Low | Two APIs | `/history` = last 5; `/blackbox` = totals + capacity + stored count |
+| 7 | Defaults: WD/thermal ON when files missing | Low (surprise) | `feature_flags.c` returns enabled if file absent | Document defaults; explicit `watchdog_off` / `thermal_off` if needed |
+
+---
+
+## 20. Conclusion
 
 Part 4 implements four appliance behaviours in one C coordinator thread (`features_part4.c`):
 
@@ -476,7 +666,7 @@ Together with Parts 1–3, this completes the Smart Guard System as specified in
 
 ---
 
-## 18. Related documents
+## 21. Related documents
 
 | Document | Role |
 |----------|------|

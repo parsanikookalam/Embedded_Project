@@ -1,6 +1,7 @@
 #include "feature_flags.h"
 #include "guard_state.h"
 #include "camera_state.h"
+#include "detection_state.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -123,10 +124,11 @@ int part4_status_json(char *buf, size_t buflen)
     if (!buf || buflen < 64)
         return -1;
     snprintf(buf, buflen,
-             "{\"guard\":%s,\"watchdog\":%s,\"thermal\":%s,\"camera\":%s}",
+             "{\"guard\":%s,\"watchdog\":%s,\"thermal\":%s,\"camera\":%s,\"detection\":%s}",
              guard_is_armed() ? "true" : "false",
              watchdog_is_enabled() ? "true" : "false",
              thermal_is_enabled() ? "true" : "false",
-             camera_is_enabled() ? "true" : "false");
+             camera_is_enabled() ? "true" : "false",
+             detection_is_enabled() ? "true" : "false");
     return 0;
 }

@@ -56,6 +56,8 @@ class CommandBody(BaseModel):
         examples=[
             "camera_on",
             "camera_off",
+            "detection_on",
+            "detection_off",
             "guard_on",
             "guard_off",
             "watchdog_on",
@@ -188,6 +190,11 @@ async def camera():
     return await _proxy_json("GET", "/api/v1/camera")
 
 
+@app.get("/api/v1/detection", summary="YOLO/face detection enabled (OFF = raw stream, no AI)")
+async def detection():
+    return await _proxy_json("GET", "/api/v1/detection")
+
+
 @app.get("/api/v1/watchdog", summary="Part 4: software watchdog enabled")
 async def watchdog():
     return await _proxy_json("GET", "/api/v1/watchdog")
@@ -198,7 +205,7 @@ async def thermal():
     return await _proxy_json("GET", "/api/v1/thermal")
 
 
-@app.get("/api/v1/part4", summary="Part 4: guard + watchdog + thermal + camera snapshot")
+@app.get("/api/v1/part4", summary="Part 4: guard + watchdog + thermal + camera + detection")
 async def part4():
     return await _proxy_json("GET", "/api/v1/part4")
 

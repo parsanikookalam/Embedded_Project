@@ -4,6 +4,7 @@
 |-------|--------|
 | Document | Final architecture & code explanation |
 | Companion | `report/part 2/report.md` (mandatory experiments) |
+| Also covers | PDF package: architecture, code, experiment tables/charts, results analysis, problems & solutions |
 | Project | Smart Guard System |
 | Student | Parsa Nikookalam · `402102657` |
 | Scope | REST APIs in C, live telemetry, shared state, Swagger gateway |
@@ -105,6 +106,40 @@ After TLS accept and `SSL_accept`:
 | GET/HEAD | `/api/v1/stream` | `handle_stream_proxy()` → MJPEG from detector |
 | POST | `/api/v1/command` | `handle_command()` parse `"cmd"` |
 
+### 4.3 Source: REST handlers in `server.c`
+
+```c
+if (path_match(buffer, "GET", "/api/v1/telemetry")) {
+    SystemTelemetry t;
+    get_system_telemetry(&t);
+    char json[512];
+    snprintf(json, sizeof(json),
+             "{\"cpu_temp\": %.2f, \"free_mem_kb\": %ld, "
+             "\"mem_used_percent\": %.2f, \"cpu_usage_percent\": %.2f}",
+             t.cpu_temp, t.free_mem_kb, t.mem_used_percent, t.cpu_usage_percent);
+    send_ssl_response(ssl, 200, "OK", "application/json", json);
+    return;
+}
+
+if (path_match(buffer, "GET", "/api/v1/persons")) {
+    PersonSnapshot snap;
+    read_persons_snapshot(&snap);
+    char json[256];
+    snprintf(json, sizeof(json),
+             "{\"count\": %d, \"timestamp\": %ld}", snap.count, snap.timestamp);
+    send_ssl_response(ssl, 200, "OK", "application/json", json);
+    return;
+}
+
+if (path_match(buffer, "GET", "/api/v1/history")) {
+    PersonHistory hist;
+    read_persons_history(&hist);
+    /* build {"records":[{"count":…,"timestamp":…}, …]} */
+    send_ssl_response(ssl, 200, "OK", "application/json", json);
+    return;
+}
+```
+
 Example telemetry payload:
 
 ```json
@@ -116,7 +151,7 @@ Example telemetry payload:
 }
 ```
 
-### 4.3 Stream proxy (`handle_stream_proxy`)
+### 4.4 Stream proxy (`handle_stream_proxy`)
 
 Purpose: browser talks **only** to the C HTTPS server; it never needs to know about Python `:5000`.
 
@@ -134,9 +169,34 @@ Content-Type: multipart/x-mixed-replace; boundary=frame
 
 If the detector is down → `502` JSON `detector_not_running`.
 
+### 4.5 Source: MJPEG proxy (abbreviated)
+
+```c
+static void handle_stream_proxy(SSL *ssl) {
+    int upstream = socket(AF_INET, SOCK_STREAM, 0);
+    /* connect to STREAM_HOST:STREAM_PORT (default 127.0.0.1:5000) */
+    char req[256];
+    snprintf(req, sizeof(req),
+             "GET /video_feed HTTP/1.1\r\nHost: %s:%d\r\nConnection: close\r\n\r\n",
+             g_stream_host, g_stream_port);
+    write(upstream, req, strlen(req));
+
+    /* After upstream headers, rewrite for the browser: */
+    snprintf(out_hdr, sizeof(out_hdr),
+             "HTTP/1.1 200 OK\r\n"
+             "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n"
+             "Cache-Control: no-cache\r\n"
+             "Connection: close\r\n"
+             "Access-Control-Allow-Origin: *\r\n"
+             "\r\n");
+    SSL_write(ssl, out_hdr, hn);
+    /* then pipe body chunks: read(upstream) → SSL_write(ssl, …) */
+}
+```
+
 This is why Part 2 load tests and Part 3 demos can use a single secure origin.
 
-### 4.4 Command dispatcher (`handle_command`)
+### 4.6 Command dispatcher (`handle_command`)
 
 Parses JSON `"cmd"` from body (or whole request buffer as fallback).
 
@@ -166,9 +226,34 @@ typedef struct {
 int get_system_telemetry(SystemTelemetry *telemetry);
 ```
 
-### 5.2 CPU usage
+### 5.2 Source: `get_system_telemetry` + CPU usage (`telemetry.c`)
 
-Classic Linux approach in `read_cpu_usage()`:
+```c
+int get_system_telemetry(SystemTelemetry *t)
+{
+    if (!t)
+        return -1;
+    t->cpu_temp = read_cpu_temp();
+    read_memory_info(&(t->mem_used_percent), &(t->free_mem_kb));
+    t->cpu_usage_percent = read_cpu_usage();
+    return 0;
+}
+
+static float read_cpu_usage(void)
+{
+    static unsigned long long prev_user = 0, prev_nice = 0, /* … */ prev_steal = 0;
+    FILE *fp = fopen("/proc/stat", "r");
+    /* fscanf cpu user nice system idle iowait irq softirq steal */
+    unsigned long long total_diff = current_total - prev_total;
+    unsigned long long idle_diff = current_idle_total - prev_idle_total;
+    /* save current counters into prev_* */
+    if (total_diff == 0)
+        return 0.0f;
+    return 100.0f * (float)(total_diff - idle_diff) / (float)total_diff;
+}
+```
+
+### 5.3 CPU usage (summary)
 
 1. Read `/proc/stat` aggregate `cpu` line (user/nice/system/idle/iowait/…).  
 2. Compare with **static previous counters** from the last call (no internal `sleep`).  
@@ -176,14 +261,14 @@ Classic Linux approach in `read_cpu_usage()`:
 
 The first call after process start often returns `0` (no prior sample). Dashboard polls every few seconds, so later samples are meaningful.
 
-### 5.3 Memory
+### 5.4 Memory
 
 Uses `sysinfo()` (or `/proc/meminfo` patterns):
 
 - `free_mem_kb`  
 - `mem_used_percent = used / total * 100`
 
-### 5.4 Temperature — board vs WSL
+### 5.5 Temperature — board vs WSL
 
 **Orange Pi / native Linux:**
 
@@ -209,7 +294,7 @@ Environment=PATH=…:/mnt/c/Windows/System32/WindowsPowerShell/v1.0
 
 so systemd can still reach Windows tools.
 
-### 5.5 Why this matters for experiments
+### 5.6 Why this matters for experiments
 
 Part 2 mandatory tests sample `/api/v1/telemetry` every 30 s (temp curves) and under curl load. All of that data comes from this module — **no Python telemetry service**.
 
@@ -227,12 +312,39 @@ Written by Python detector; read by C:
 
 `read_persons_snapshot()` does a small-string parse (`strstr` + `sscanf`) — intentionally dependency-light (no full JSON library required in C).
 
+### 6.2 Source: reading `persons.json` (`persons_state.c`)
+
+```c
+#define PERSONS_JSON_PATH "../data/persons.json"
+
+int read_persons_snapshot(PersonSnapshot *out)
+{
+    FILE *fp = fopen(PERSONS_JSON_PATH, "r");
+    char buf[256] = {0};
+    fread(buf, 1, sizeof(buf) - 1, fp);
+    fclose(fp);
+
+    int count = 0;
+    long ts = 0;
+    char *p = strstr(buf, "\"count\"");
+    if (p)
+        sscanf(p, "\"count\"%*[^0-9-]%d", &count);
+    p = strstr(buf, "\"timestamp\"");
+    if (p)
+        sscanf(p, "\"timestamp\"%*[^0-9-]%ld", &ts);
+
+    out->count = count;
+    out->timestamp = ts;
+    return 0;
+}
+```
+
 Used by:
 
 - `GET /api/v1/persons`  
 - Email / MQTT / Part 4 Guard (same snapshot reader)
 
-### 6.2 `history.db` (SQLite)
+### 6.3 `history.db` (SQLite)
 
 Detector inserts into `detections(count, timestamp)`.  
 C opens **read-only** and:
@@ -264,7 +376,29 @@ It must **not** compute telemetry or detection itself.
 | `_proxy_json` | httpx GET/POST to C with `verify=False` (self-signed) |
 | `_c_command_http10` | Tiny raw **HTTP/1.0** TLS client for `POST /command` |
 
-### 7.3 Why HTTP/1.0 for commands?
+### 7.3 Source: HTTP/1.0 command helper (`gateway/main.py`)
+
+```python
+def _c_command_http10(cmd: str) -> Tuple[int, bytes, str]:
+    """Minimal HTTP/1.0 POST — headers+JSON in one TLS write (Swagger-safe)."""
+    body = json.dumps({"cmd": cmd}, separators=(",", ":")).encode("utf-8")
+    req = (
+        f"POST /api/v1/command HTTP/1.0\r\n"
+        f"Host: 127.0.0.1:{HTTPS_PORT}\r\n"
+        f"Content-Type: application/json\r\n"
+        f"Content-Length: {len(body)}\r\n"
+        f"Connection: close\r\n"
+        f"\r\n"
+    ).encode("ascii") + body
+
+    ctx = ssl._create_unverified_context()
+    with socket.create_connection(("127.0.0.1", HTTPS_PORT), timeout=8) as sock:
+        with ctx.wrap_socket(sock, server_hostname="127.0.0.1") as ssock:
+            ssock.sendall(req)
+            # … read response …
+```
+
+### 7.4 Why HTTP/1.0 for commands?
 
 Some HTTP/2 or httpx write patterns split headers and body across TLS records. Early C code that did a single `SSL_read` then reported `missing_cmd`.  
 
@@ -273,7 +407,7 @@ Fix (two sides):
 1. C: `ssl_read_http_request()` loops until `Content-Length` satisfied.  
 2. Gateway: send a classic HTTP/1.0 request in **one** `sendall` for commands.
 
-### 7.4 systemd
+### 7.5 systemd
 
 `api_gateway.service` runs the module directly (uvicorn is started from `if __name__ == "__main__"` in `gateway/main.py`):
 
@@ -384,7 +518,80 @@ xdg-open http://127.0.0.1:8000/docs   # or browser on Windows host
 
 ---
 
-## 16. Conclusion
+## 16. PDF report package (what this part must contain)
+
+Per the course PDF, Part 2 must include **architecture**, **code explanation**, **all experiment tables and charts**, **results analysis**, and **problems & solutions**.
+
+| PDF expectation | Where it lives |
+|-----------------|----------------|
+| Architecture | Sections 2–3 of this `explain.md` |
+| Code explanation | Sections 4–10 (REST, telemetry, gateway) with source excerpts |
+| Experiment tables & graphs | `report/part 2/report.md` + `fig/` |
+| Results analysis | Section 17 below |
+| Problems & solutions | Section 18 below |
+
+### 16.1 Mandatory experiments — tables & figures checklist
+
+| No. | Experiment (PDF) | Required tables / charts | Files in `fig/` |
+|-----|------------------|--------------------------|-----------------|
+| **2-1** | Temp idle / stream / stream+detect (30 s, 5 min) | **3-curve** temp-vs-time graph; **max-temp table**; final detection screenshot | `01_temp_vs_time.png`, `02_detect_final_state.png` (+ CSV optional) |
+| **2-2** | C memory during 5 min stream (every 5 s) | Memory-vs-time graph; leak analysis | `03_mem_vs_time.png`, `mem_web_server.csv` |
+| **2-3** | 50 concurrent curls to `/api/v1/telemetry` | Tables: Δ temp/CPU/mem; latency mean/max/increase | `04_telemetry_latency.png`, `05_load_test_terminal.png` |
+| **2-4** | Network disconnect 2 min during stream | Behaviour write-up + log screenshots + recovery | `06_network_disconnect_logs.png`, `07_network_recovery.png` |
+
+### 16.2 Example result tables (fill with measured values in `report.md`)
+
+**2-1 — Max temperature (°C)**
+
+| State | Max temp (°C) |
+|-------|----------------|
+| (a) Idle | *(from CSV / graph)* |
+| (b) Stream only | *(…)* |
+| (c) Stream + detection | *(…)* |
+
+**2-2 — Memory (RSS of `web_server`)**
+
+| Metric | Value |
+|--------|--------|
+| Initial RSS (KB) | … |
+| Final / peak RSS (KB) | … |
+| Leak? | Yes / No + one-sentence justification |
+
+**2-3 — Load vs baseline**
+
+| Metric | Before | After burst | Δ |
+|--------|--------|-------------|---|
+| `cpu_temp` | … | … | … |
+| `cpu_usage_percent` | … | … | … |
+| Latency mean (s) | … | … | … |
+
+---
+
+## 17. Results analysis (Part 2)
+
+| Experiment | What the data should show | Interpretation |
+|------------|---------------------------|----------------|
+| **2-1** | Idle ≤ stream ≤ stream+detect (typically) | Detection (YOLO) raises CPU heat; stream alone is lighter than full detect |
+| **2-2** | RSS flat after warmup | Threaded MJPEG proxy without unbounded buffers → **no leak** in 5 min window if plot is flat |
+| **2-3** | Latency and CPU rise under 50-way TLS GETs | pthread-per-connection + OpenSSL cost; service must stay correct (200 JSON), not crash |
+| **2-4** | Local `127.0.0.1` may keep working; remote clients stall | Architecture is local appliance; uplink loss ≠ process death; recover by reconnecting clients |
+
+---
+
+## 18. Problems encountered and how they were solved (Part 2)
+
+| # | Problem | Severity | Cause | Solution |
+|---|---------|----------|-------|----------|
+| 1 | Swagger `POST /command` → `missing_cmd` | High | httpx/TLS split body across records; early single `SSL_read` | C: `ssl_read_http_request()` loops until `Content-Length` complete; Gateway: raw **HTTP/1.0** `sendall` helper |
+| 2 | CPU temperature −1 / wrong on WSL | High | No real sysfs package temp in WSL | Windows **HostCpuTemp** file + `telemetry.c` cache/helper (`host_cpu_temp.sh`) |
+| 3 | Stream 502 `detector_not_running` | Medium | Detector down or port mismatch | Ensure `human_detector` active; `STREAM_HOST/PORT` match `:5000` |
+| 4 | Concurrent load spikes latency | Expected | Many TLS handshakes | Documented in exp 2-3; threading keeps server alive |
+| 5 | Wi-Fi off does not kill localhost stream | Expected (exp 2-4) | Bind is `127.0.0.1` (loopback ≠ uplink) | Documented as correct behaviour: local stream stays up while Wi-Fi is off |
+| 6 | Confusing system RAM vs C RSS | Medium | PDF asks for C program memory | Sample `/proc/<pid>/status` **VmRSS** of `web_server`, not only `/api/v1/telemetry` mem_% |
+
+---
+
+## 19. Conclusion
 
 Part 2 turns the Part 1 HTTPS appliance into a **telemetry- and control-capable REST device**:
 
@@ -398,7 +605,7 @@ This separation matches the course rule: **core logic in C**; Python is limited 
 
 ---
 
-## 17. Related documents
+## 20. Related documents
 
 | Document | Role |
 |----------|------|

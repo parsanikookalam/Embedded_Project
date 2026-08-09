@@ -45,12 +45,15 @@ HISTORY_DB = os.path.join(DATA_DIR, "history.db")
 HEARTBEAT_JSON = os.path.join(DATA_DIR, "vision_heartbeat.json")
 THERMAL_CTRL_JSON = os.path.join(DATA_DIR, "thermal_control.json")
 CAMERA_STATE_JSON = os.path.join(DATA_DIR, "camera_state.json")
+DETECTION_STATE_JSON = os.path.join(DATA_DIR, "detection_state.json")
 BLACKBOX_CAPACITY = 500
 os.makedirs(DATA_DIR, exist_ok=True)
 
 # In-memory flag (file can lag / stream can look “stuck” if only file is used)
 _camera_enabled = False
 _camera_lock = threading.Lock()
+_detection_enabled = True
+_detection_lock = threading.Lock()
 
 load_dotenv(os.path.join(BASE_DIR, "config.env"))
 STUDENT_ID = os.getenv("STUDENT_ID", "402102657").strip('"').strip("'") or "402102657"
@@ -407,13 +410,23 @@ def _parse_enabled(data: dict) -> bool:
 
 
 def load_camera_state_from_file() -> bool:
-    """Read data/camera_state.json written by forked C web_server."""
+    """Read data/camera_state.json written by C web_server."""
     try:
         with open(CAMERA_STATE_JSON, "r", encoding="utf-8") as f:
             data = json.load(f)
         return _parse_enabled(data)
     except Exception:
         return False
+
+
+def load_detection_state_from_file() -> bool:
+    """Read data/detection_state.json — default ON if missing."""
+    try:
+        with open(DETECTION_STATE_JSON, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return _parse_enabled(data)
+    except Exception:
+        return True
 
 
 def set_camera_enabled(enabled: bool, *, persist: bool = True) -> bool:
@@ -437,11 +450,20 @@ def set_camera_enabled(enabled: bool, *, persist: bool = True) -> bool:
 
 
 def camera_enabled() -> bool:
-    """Always prefer the shared file (C forks; memory is not shared there)."""
+    """Always prefer the shared file (C writes; Python re-reads)."""
     val = load_camera_state_from_file()
     with _camera_lock:
         _camera_enabled = val
         return _camera_enabled
+
+
+def detection_enabled() -> bool:
+    """When False, skip YOLO/face entirely (stream may still show raw camera)."""
+    global _detection_enabled
+    val = load_detection_state_from_file()
+    with _detection_lock:
+        _detection_enabled = val
+        return _detection_enabled
 
 
 def open_local_device(index: int = 0) -> Optional[cv2.VideoCapture]:
@@ -489,7 +511,9 @@ def open_local_device(index: int = 0) -> Optional[cv2.VideoCapture]:
 init_history_db()
 write_persons_snapshot(0, int(time.time()))
 load_camera_state_from_file()
+load_detection_state_from_file()
 print(f"[cam] initial enabled={camera_enabled()} file={CAMERA_STATE_JSON}")
+print(f"[det] initial enabled={detection_enabled()} file={DETECTION_STATE_JSON}")
 
 app = FastAPI(title="Smart Guard Detector", docs_url=None, redoc_url=None)
 
@@ -669,18 +693,27 @@ def detect_humans() -> None:
             # Fresh frame arrived — this is what resets the watchdog timer
             write_heartbeat("capturing", touch_ts=True)
 
-            # Thermal: skip YOLO some frames (keep stream live). Do NOT sleep the pipeline.
-            run_detect = (frame_i % detect_every) == 0
-            frame_i += 1
+            det_on = detection_enabled()
             detect_ms = 0.0
-            if run_detect:
-                t0 = time.time()
-                last_dets = detect_people(frame, input_size=yolo_in)
-                detect_ms = (time.time() - t0) * 1000.0
-                count_buffer.append(len(last_dets))
-                stable = sorted(count_buffer)[len(count_buffer) // 2]
-
-            dets = last_dets
+            if not det_on:
+                # Detection toggle OFF — do not run YOLO/face at all
+                last_dets = []
+                stable = 0
+                count_buffer.clear()
+                thr_tag = " | DET OFF"
+                dets = []
+            else:
+                # Thermal: skip YOLO some frames (keep stream live).
+                run_detect = (frame_i % detect_every) == 0
+                frame_i += 1
+                if run_detect:
+                    t0 = time.time()
+                    last_dets = detect_people(frame, input_size=yolo_in)
+                    detect_ms = (time.time() - t0) * 1000.0
+                    count_buffer.append(len(last_dets))
+                    stable = sorted(count_buffer)[len(count_buffer) // 2]
+                thr_tag = f" | THR{thr_lvl} skip={detect_every}" if thr_lvl else ""
+                dets = last_dets
 
             for (box, kind) in dets:
                 x, y, w, h = box
@@ -716,7 +749,6 @@ def detect_humans() -> None:
                 (0, 255, 0),
                 2,
             )
-            thr_tag = f" | THR{thr_lvl} skip={detect_every}" if thr_lvl else ""
             cv2.putText(
                 frame,
                 f"{stamp}  |  Persons: {stable}  |  FPS: {fps:.1f}  |  det {detect_ms:.0f}ms{thr_tag}",
@@ -726,9 +758,10 @@ def detect_humans() -> None:
                 (0, 255, 0),
                 2,
             )
+            body_face = f"{BODY_KIND}+{FACE_KIND}" if det_on else "OFF (no AI)"
             cv2.putText(
                 frame,
-                f"detector: {BODY_KIND}+{FACE_KIND}  in={yolo_in}",
+                f"detector: {body_face}  in={yolo_in if det_on else 0}",
                 (10, 72),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.45,
@@ -839,4 +872,4 @@ async def health():
 
 if __name__ == "__main__":
     threading.Thread(target=detect_humans, daemon=True).start()
-    uvicorn.run(app, host="127.0.0.1", port=DETECTOR_PORT, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=DETECTOR_PORT, log_level="info")

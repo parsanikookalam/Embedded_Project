@@ -30,7 +30,7 @@ sudo systemctl restart smart-guard.target
 sleep 2
 systemctl is-enabled smart-guard human_detector web_server api_gateway || true
 systemctl is-active human_detector web_server api_gateway || true
-systemctl --no-pager --full status human_detector web_server api_gateway | sed -n '1,40p' || true
+systemctl --no-pager --full status human_detector web_server api_gateway | sed -n '1,50p' || true
 
 echo
 echo "============================================================"
@@ -45,5 +45,5 @@ echo "       systemctl is-system-running"
 echo "       systemctl is-active human_detector web_server api_gateway"
 echo
 echo "Expected: running / active active active"
-echo "Camera still only turns on when you open https://127.0.0.1:8443/"
+echo "Dashboard: https://127.0.0.1:8443/"
 echo "============================================================"

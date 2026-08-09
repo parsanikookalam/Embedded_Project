@@ -25,6 +25,7 @@
 #include "email_alert.h"
 #include "guard_state.h"
 #include "camera_state.h"
+#include "detection_state.h"
 #include "feature_flags.h"
 #include "http_server.h"
 
@@ -370,6 +371,26 @@ static void handle_command(SSL *ssl, const char *req) {
         return;
     }
 
+    if (strcmp(cmd, "detection_on") == 0 || strcmp(cmd, "detect_on") == 0) {
+        int e = detection_set_enabled(1);
+        char json[128];
+        snprintf(json, sizeof(json),
+                 "{\"status\":\"ok\",\"cmd\":\"detection_on\",\"enabled\":%s}",
+                 e ? "true" : "false");
+        send_ssl_response(ssl, 200, "OK", "application/json", json);
+        return;
+    }
+
+    if (strcmp(cmd, "detection_off") == 0 || strcmp(cmd, "detect_off") == 0) {
+        int e = detection_set_enabled(0);
+        char json[128];
+        snprintf(json, sizeof(json),
+                 "{\"status\":\"ok\",\"cmd\":\"detection_off\",\"enabled\":%s}",
+                 e ? "true" : "false");
+        send_ssl_response(ssl, 200, "OK", "application/json", json);
+        return;
+    }
+
     if (strcmp(cmd, "watchdog_on") == 0) {
         int e = watchdog_set_enabled(1);
         char json[128];
@@ -414,7 +435,8 @@ static void handle_command(SSL *ssl, const char *req) {
     snprintf(resp, sizeof(resp),
              "{\"error\":\"unknown_cmd\",\"cmd\":\"%s\","
              "\"supported\":[\"reboot\",\"test_email\",\"guard_on\",\"guard_off\","
-             "\"camera_on\",\"camera_off\",\"watchdog_on\",\"watchdog_off\","
+             "\"camera_on\",\"camera_off\",\"detection_on\",\"detection_off\","
+             "\"watchdog_on\",\"watchdog_off\","
              "\"thermal_on\",\"thermal_off\"]}",
              cmd);
     send_ssl_response(ssl, 400, "Bad Request", "application/json", resp);
@@ -512,6 +534,13 @@ static void handle_https_client(SSL *ssl) {
     if (path_match(buffer, "GET", "/api/v1/camera")) {
         char json[64];
         camera_get_json(json, sizeof(json));
+        send_ssl_response(ssl, 200, "OK", "application/json", json);
+        return;
+    }
+
+    if (path_match(buffer, "GET", "/api/v1/detection")) {
+        char json[64];
+        detection_get_json(json, sizeof(json));
         send_ssl_response(ssl, 200, "OK", "application/json", json);
         return;
     }

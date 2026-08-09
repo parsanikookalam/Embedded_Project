@@ -199,7 +199,7 @@
         <div class="stream-frame">
           <img id="stream-img" src="/api/v1/stream" alt="Live camera stream">
         </div>
-        <div class="stream-meta">HTTPS · <code>/api/v1/stream</code> · camera must be ON to detect</div>
+        <div class="stream-meta">HTTPS · <code>/api/v1/stream</code> · Camera ON for video · Detection ON for YOLO</div>
       </section>
 
       <section class="panel controls">
@@ -213,6 +213,16 @@
             <button class="btn-off" onclick="cmd('camera_off')">OFF</button>
           </div>
           <p>Manual only. Stream page open does not start webcam.</p>
+        </div>
+
+        <div class="toggle" id="box-detection">
+          <h3>Detection (YOLO / AI)</h3>
+          <div class="state" id="st-detection">…</div>
+          <div class="btns">
+            <button class="btn-on" onclick="cmd('detection_on')">ON</button>
+            <button class="btn-off" onclick="cmd('detection_off')">OFF</button>
+          </div>
+          <p>When OFF: no YOLO/face — stream can still show raw camera frames. Count stays 0 (no Guard/email from persons).</p>
         </div>
 
         <div class="toggle danger" id="box-guard">
@@ -255,7 +265,7 @@
       <div class="metric"><div class="lbl">Black-box</div><div class="val" id="blackbox-total">0</div></div>
     </div>
 
-    <footer id="api-hint">APIs: <code>/api/v1/part4</code> · <code>/api/v1/guard</code> · <code>/api/v1/watchdog</code> · <code>/api/v1/thermal</code> · Swagger :8000/docs</footer>
+    <footer id="api-hint">APIs: <code>/api/v1/part4</code> · <code>/api/v1/camera</code> · <code>/api/v1/detection</code> · <code>/api/v1/guard</code> · Swagger :8000/docs</footer>
   </div>
 
   <script>
@@ -266,10 +276,12 @@
 
     function renderPart4(p) {
       document.getElementById('st-camera').textContent = p.camera ? 'ON' : 'OFF';
+      document.getElementById('st-detection').textContent = p.detection ? 'ON' : 'OFF';
       document.getElementById('st-guard').textContent = p.guard ? 'ARMED' : 'DISARMED';
       document.getElementById('st-watchdog').textContent = p.watchdog ? 'ENABLED' : 'DISABLED';
       document.getElementById('st-thermal').textContent = p.thermal ? 'ENABLED' : 'DISABLED';
       setOn(document.getElementById('box-camera'), p.camera, false);
+      setOn(document.getElementById('box-detection'), p.detection, false);
       setOn(document.getElementById('box-guard'), p.guard, true);
       setOn(document.getElementById('box-watchdog'), p.watchdog, false);
       setOn(document.getElementById('box-thermal'), p.thermal, false);

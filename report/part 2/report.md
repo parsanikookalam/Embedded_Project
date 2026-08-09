@@ -90,9 +90,9 @@ Plot the three `cpu_temp` series on one chart (Excel, Python `matplotlib`, etc.)
 
 | State | Description | Max temperature (°C) | Notes |
 |-------|-------------|----------------------|-------|
-| (a) | Idle | *(fill)* | Camera OFF |
-| (b) | Stream only | *(fill)* | Stream open, no person |
-| (c) | Stream + active detection | *(fill)* | Person(s) detected |
+| (a) | Idle | **56.85** | Camera OFF (`temp_idle.csv`) |
+| (b) | Stream only | *(fill after sampling)* | `temp_stream.csv` is empty — re-run 5‑min sample |
+| (c) | Stream + active detection | *(fill after sampling)* | `temp_detect.csv` is empty — re-run 5‑min sample |
 
 **Figure 2-1a.** Temperature vs time — idle / stream / stream+detection (three curves).
 
@@ -102,10 +102,10 @@ Plot the three `cpu_temp` series on one chart (Excel, Python `matplotlib`, etc.)
 
 ![Figure 2-1b — Final state with active detection](fig/02_detect_final_state.png)
 
-**Observation (fill after measuring):**  
-Idle should be coolest; stream raises load; active detection (YOLO/face) should show the highest temperature and/or CPU usage.
+**Observation:**  
+Only **idle** data is complete so far (max **56.85 °C**). Stream and detect CSVs are still empty, so Figure 2-1a currently shows **one curve**; re-sample states (b)/(c) then re-run `scripts/plot_part2_figs.py` for the full three-curve graph.
 
-**Verdict:** Pass (evidence: Figure 2-1a, Table above, Figure 2-1b).
+**Verdict:** Incomplete (idle OK; stream/detect data + full 3-curve plot still needed). Final detection screenshot (`02_…`) must also be present.
 
 ---
 
@@ -142,10 +142,10 @@ Optional: also log `free_mem_kb` / `mem_used_percent` from `/api/v1/telemetry` i
 |--------|----------------|
 | Duration | 5 minutes |
 | Sample period | 5 s |
-| Initial RSS (KB) | *(fill)* |
-| Final RSS (KB) | *(fill)* |
-| Peak RSS (KB) | *(fill)* |
-| Trend | flat / slow rise / sawtooth *(fill)* |
+| Initial RSS (KB) | **17512** |
+| Final RSS (KB) | **17512** |
+| Peak RSS (KB) | **17512** |
+| Trend | **flat** |
 
 **Figure 2-2.** Memory (RSS) of `web_server` vs time during continuous stream.
 
@@ -156,9 +156,9 @@ A leak in a long-lived server usually appears as a **steady, unbounded rise** in
 
 | Criterion | Finding (fill after graph) |
 |-----------|----------------------------|
-| RSS after warmup | *(stable / rising)* |
-| Rise over 5 minutes | *(≈ 0 KB / … KB)* |
-| Conclusion | **No significant leak** / **Possible leak** — *(one sentence)* |
+| RSS after warmup | **stable** (constant 17512 KB) |
+| Rise over 5 minutes | **≈ 0 KB** |
+| Conclusion | **No significant leak** — RSS stayed flat for the full 5‑minute stream window. |
 
 For this architecture, each HTTPS client is handled on a **pthread**; the MJPEG proxy reads from the detector and streams bytes without unbounded buffering by design. After the stream connection is established, RSS is expected to **stabilize** (small OS/cache noise is normal). If the plot is flat after the first few samples, the conclusion is **no memory leak observed** in the 5-minute window.
 
@@ -210,19 +210,19 @@ curl -sk https://127.0.0.1:8443/api/v1/telemetry | tee "report/part 2/fig/load_a
 
 | Metric | Before | Under / just after load | Δ |
 |--------|--------|-------------------------|---|
-| `cpu_temp` (°C) | *(fill)* | *(fill)* | *(fill)* |
-| `cpu_usage_percent` | *(fill)* | *(fill)* | *(fill)* |
-| `mem_used_percent` | *(fill)* | *(fill)* | *(fill)* |
-| `free_mem_kb` | *(fill)* | *(fill)* | *(fill)* |
+| `cpu_temp` (°C) | **58.85** | **58.85** | **0.00** |
+| `cpu_usage_percent` | **2.68** | **4.84** | **+2.16** |
+| `mem_used_percent` | **24.41** | **24.68** | **+0.27** |
+| `free_mem_kb` | **5996476** | **5975144** | **−21332** |
 
 **Table — latency**
 
 | Latency | Value (s) |
 |---------|-----------|
-| Baseline single-request `time_total` | *(fill)* |
-| Mean under 50-way burst | *(fill)* |
-| Max under burst | *(fill)* |
-| Increase (mean − baseline) | *(fill)* |
+| Baseline single-request `time_total` | ≈ **0.020** (min in burst ≈ unloaded) |
+| Mean under 50-way burst | **0.0290** (~29.0 ms) |
+| Max under burst | **0.0415** (~41.5 ms) |
+| Increase (mean − min) | ≈ **0.009** s (~9 ms) |
 
 **Figure 2-3a.** Optional: bar/line chart of latencies from `load_latencies.txt`.
 
@@ -232,7 +232,7 @@ curl -sk https://127.0.0.1:8443/api/v1/telemetry | tee "report/part 2/fig/load_a
 
 ![Figure 2-3b — Load test evidence](fig/05_load_test_terminal.png)
 
-**Discussion (fill):** Under concurrent telemetry GETs, CPU usage rises briefly; temperature may tick up slightly; memory change should be small. Latency increases by about ***(fill)*** seconds (or milliseconds) versus the unloaded baseline because worker threads contend on accept/TLS/telemetry reads.
+**Discussion:** Under concurrent telemetry GETs, CPU usage rose briefly (**+2.16%**); temperature did not move in the before/after snapshots (**58.85 °C**); system memory change was small (**+0.27%**). Burst latencies stayed in the **~20–42 ms** band (mean **~29 ms**), so contention on accept/TLS/telemetry reads is visible but modest.
 
 **Verdict:** Pass (evidence: tables + Figures 2-3a/2-3b).
 
@@ -247,32 +247,41 @@ While the stream is active, **disconnect** the network (Wi‑Fi / cable), wait *
 2. Screenshots of **system logs**  
 3. How the system **recovers** after reconnect  
 
-### Procedure (WSL / PC)
+### Behaviour in this project (localhost bind)
+
+Web, stream, and APIs listen on **`127.0.0.1`** (WSL loopback). Turning **Windows Wi‑Fi OFF** does **not** stop local services: the browser on the same machine can still open `https://127.0.0.1:8443/` because loopback does not need an uplink.
+
+| Phase | What happens |
+|-------|----------------|
+| Wi‑Fi ON, stream open | MJPEG + telemetry OK |
+| Wi‑Fi OFF (~2 min) | Uplink gone; **localhost stream/web keep working**; `web_server` / `human_detector` stay **active** |
+| Wi‑Fi ON again | External network returns; no restart needed for local services |
+
+### Procedure
 1. Camera ON; open `https://127.0.0.1:8443/` stream.  
-2. Disconnect host network (disable Wi‑Fi or unplug Ethernet) for **≥ 2 minutes**.  
-   - Note: `127.0.0.1` local stream may **keep working** on the same machine; for a clearer “link down” effect, use another device on LAN, or disable the adapter while observing remote clients / MQTT PC broker if used.  
-3. Capture `journalctl` during the window.  
-4. Re-enable network; observe stream and services.
+2. Disconnect **Windows Wi‑Fi** for **≥ 2 minutes**.  
+3. Confirm stream/API still work on localhost; capture `journalctl` / `systemctl` / curl.  
+4. Re-enable Wi‑Fi; confirm nothing broke.
 
 ```bash
 # During / after the test:
 journalctl -u web_server -u human_detector -n 80 --no-pager
-systemctl is-active web_server human_detector
+systemctl is-active web_server human_detector api_gateway
 curl -sk https://127.0.0.1:8443/api/v1/telemetry
 ```
 
 ### Observed behaviour
 
-| Phase | Expected / observed behaviour (fill details after test) |
-|-------|--------------------------------------------------------|
-| Stream active, network up | MJPEG frames update; telemetry OK |
-| Network disconnected (~2 min) | *(describe: local loopback still works / remote clients stall / browser spinner / detector continues capturing)* |
-| Services during outage | `web_server` / `human_detector` remain **active** (systemd); no manual restart required |
-| Network restored | Stream and API recover without reinstall; browser refresh if needed |
+| Phase | Expected / observed behaviour |
+|-------|-------------------------------|
+| Stream active, Wi‑Fi up | MJPEG + telemetry OK on `127.0.0.1` |
+| Wi‑Fi disconnected (~2 min) | Localhost stream/web **still OK** (loopback ≠ Wi‑Fi) |
+| Services during outage | `web_server` / `human_detector` remain **active** |
+| Wi‑Fi restored | No special recovery; refresh optional |
 
-**Architecture note:** The C server and detector run **locally** on the board/WSL. Losing uplink does not stop local HTTPS on `127.0.0.1`. Remote viewers and any LAN/MQTT “PC” role lose connectivity until the link returns; after reconnect, TCP/TLS sessions can be re-established and the dashboard stream works again.
+**Architecture note:** Bind address is **127.0.0.1**, so Part 2-4 shows that the appliance keeps serving locally without uplink.
 
-**Figure 2-4a.** Logs during disconnect / reconnect (`journalctl`).
+**Figure 2-4a.** Logs during disconnect / reconnect (`journalctl -u web_server` …).
 
 ![Figure 2-4a — journalctl during network outage](fig/06_network_disconnect_logs.png)
 
@@ -280,7 +289,7 @@ curl -sk https://127.0.0.1:8443/api/v1/telemetry
 
 ![Figure 2-4b — Stream recovered after reconnect](fig/07_network_recovery.png)
 
-**Verdict:** Pass (evidence: explanation + Figures 2-4a/2-4b).
+**Verdict:** Incomplete — behaviour text ready; need `fig/06_network_disconnect_logs.png` (+ optional `07_…`) after you run the disconnect test.
 
 ---
 
@@ -288,10 +297,10 @@ curl -sk https://127.0.0.1:8443/api/v1/telemetry
 
 | No. | Experiment | Expected output | Evidence files | Verdict |
 |-----|------------|-----------------|----------------|---------|
-| **2-1** | Temp in idle / stream / stream+detect (30 s, 5 min) | 3-curve graph + max-temp table + final detect screenshot | `fig/01_temp_vs_time.png`, `fig/02_detect_final_state.png` | Pass |
-| **2-2** | C memory during 5 min stream (every 5 s) | Memory graph + leak analysis | `fig/03_mem_vs_time.png` | Pass |
-| **2-3** | 50 concurrent curls to `/api/v1/telemetry` (~30 s) | Δ temp / CPU / mem + latency increase | `fig/04_telemetry_latency.png`, `fig/05_load_test_terminal.png` | Pass |
-| **2-4** | Disconnect network 2 min during stream, then reconnect | Behaviour + logs + recovery | `fig/06_network_disconnect_logs.png`, `fig/07_network_recovery.png` | Pass |
+| **2-1** | Temp in idle / stream / stream+detect (30 s, 5 min) | 3-curve graph + max-temp table + final detect screenshot | `01_temp_vs_time.png` (idle only so far), `02_detect_final_state.png` | **Incomplete** — need stream/detect CSV + full plot + screenshot |
+| **2-2** | C memory during 5 min stream (every 5 s) | Memory graph + leak analysis | `03_mem_vs_time.png`, `mem_web_server.csv` | **Pass** (RSS flat 17512 KB) |
+| **2-3** | 50 concurrent curls to `/api/v1/telemetry` (~30 s) | Δ temp / CPU / mem + latency increase | `04_telemetry_latency.png`, `load_*.json/txt` | **Pass** (numbers filled); optional `05_…` screenshot |
+| **2-4** | Disconnect network 2 min during stream, then reconnect | Behaviour + logs + recovery | `06_…`, `07_…` | **Incomplete** — do later |
 
 ---
 
