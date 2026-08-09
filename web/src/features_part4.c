@@ -232,20 +232,26 @@ static void *part4_thread(void *arg)
                 write_thermal_control(throttle_level, temp);
                 last_thermal_write = now;
                 printf("[part4] thermal level=%d temp=%.1f\n", throttle_level, temp);
+                /* Email on enter / level-up into throttle (rate-limited); MQTT below is continuous */
                 if (throttle_level > 0 && now - last_thermal_mail >= 60) {
                     char body[512];
                     snprintf(body, sizeof(body),
                              "Adaptive thermal management\nCPU temp=%.2f C (threshold %.0f C).\n"
                              "Throttle level=%d — run YOLO every N frames (stream stays live).\n"
-                             "MQTT topic: home/%s/thermal\n",
+                             "MQTT topic: home/%s/thermal (publishes every second while hot)\n",
                              temp, g_thermal_on, throttle_level, g_student_id);
                     email_send_event("[Smart Guard] Thermal throttle active", body, 0);
-                    mqtt_publish_thermal(throttle_level, temp, now);
                     last_thermal_mail = now;
                 }
             } else if (now - last_thermal_write >= 15) {
                 write_thermal_control(throttle_level, temp);
                 last_thermal_write = now;
+            }
+
+            /* MQTT: every poll while temp stays above enter threshold (not only once) */
+            if (temp >= g_thermal_on) {
+                int lvl = throttle_level > 0 ? throttle_level : 1;
+                mqtt_publish_thermal(lvl, temp, now);
             }
         } else if (!thermal_is_enabled() && throttle_level != 0) {
             throttle_level = 0;

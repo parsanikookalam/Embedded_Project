@@ -604,7 +604,7 @@ Per the course PDF, Part 4 must include **architecture**, **code explanation**, 
 | **4-1** | Guard mode | **Video** + images of operation | `01_guard_mode.mp4`, `02_guard_email.png`, `03_guard_alarm.png` |
 | **4-2** | Black box | Image of DB / API events | `04_blackbox_events.png` |
 | **4-3** | Software watchdog | Disconnect camera; **video** + image of reaction | `05_watchdog.mp4`, `06_watchdog_evidence.png` |
-| **4-4** | Adaptive thermal | Raise CPU; **MQTT + email + lost FPS + control JSON** | `07_thermal_mqtt.png`, `08_thermal_email.png`, `09_thermal_fps.png`, `10_thermal_control.json.png` |
+| **4-4** | Adaptive thermal | Raise CPU; **MQTT + email + lost FPS** | `07_thermal_mqtt.png`, `08_thermal_email.png`, `09_thermal_fps.png` |
 
 ### 17.2 Example evidence tables
 
