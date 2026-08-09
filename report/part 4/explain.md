@@ -601,7 +601,7 @@ Per the course PDF, Part 4 must include **architecture**, **code explanation**, 
 
 | No. | Experiment (PDF) | Required output | Files in `fig/` |
 |-----|------------------|-----------------|-----------------|
-| **4-1** | Guard mode | **Video** + images of operation | `01_guard_mode.mp4`, `02_guard_dashboard.png`, `03_guard_alarm.png` |
+| **4-1** | Guard mode | **Video** + images of operation | `01_guard_mode.mp4`, `02_guard_email.png`, `03_guard_alarm.png` |
 | **4-2** | Black box | Image of DB / API events | `04_blackbox_events.png` |
 | **4-3** | Software watchdog | Disconnect camera; **video** + image of reaction | `05_watchdog.mp4`, `06_watchdog_evidence.png` |
 | **4-4** | Adaptive thermal | Raise CPU with Linux tools; functional images | `07_thermal_throttle.png`, `08_thermal_demo.png` |

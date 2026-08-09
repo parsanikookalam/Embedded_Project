@@ -25,7 +25,7 @@ Demonstrate **Guard mode** operation. The report must include a **video** and **
 1. Enable Guard (`guard_on`) and Camera (`camera_on`) from the dashboard or REST API.  
 2. Subscribe to MQTT topic `home/402102657/alarm`.  
 3. A person enters the frame so the detection count **increases** (0→1, or 1→2, …).  
-4. Record the dashboard, the MQTT alarm message, and/or the Guard alarm email with photo.  
+4. Record a short **video**, screenshot the **Guard alarm email**, and screenshot the **MQTT** `…/alarm` message.  
 5. Optionally disarm with `guard_off`.
 
 ### Implementation
@@ -37,19 +37,19 @@ While Guard is armed, the C coordinator in `features_part4.c` reacts to any **in
 This is separate from Part 3’s debounced presence email (~30 s while persons ≥ 1).
 
 ### Result
-With Guard armed, a count increase triggers the anti-theft path immediately: alarm email/photo and MQTT `…/alarm` are produced. The demo video and still images document this behaviour end-to-end.
+With Guard armed, a count increase triggers the anti-theft path immediately: alarm email/photo and MQTT `…/alarm` are produced. The demo video plus email and MQTT screenshots document this behaviour end-to-end.
 
 **Media 4-1.** Guard mode operation video.
 
 `report/part 4/fig/01_guard_mode.mp4`
 
-**Figure 4-1a.** Dashboard with Guard armed and person detected.
+**Figure 4-1a.** Guard alarm **email** evidence (inbox / message with photo).
 
-![Figure 4-1a — Guard armed / detection](fig/02_guard_dashboard.png)
+![Figure 4-1a — Guard alarm email](fig/02_guard_email.png)
 
-**Figure 4-1b.** MQTT `home/402102657/alarm` and/or Guard email evidence.
+**Figure 4-1b.** MQTT `home/402102657/alarm` evidence (`mosquitto_sub`).
 
-![Figure 4-1b — Guard alarm MQTT/email](fig/03_guard_alarm.png)
+![Figure 4-1b — Guard alarm MQTT](fig/03_guard_alarm.png)
 
 **Verdict:** Pass (evidence: Media 4-1 + Figures 4-1a/b).
 
@@ -103,7 +103,7 @@ Demonstrate the **software watchdog**: **disconnect the camera** and provide a *
 2. Start recording.  
 3. Disconnect the camera (physical unplug, or on WSL: `usbipd detach` / remove the device).  
 4. Wait longer than **30 seconds** (`WATCHDOG_SEC`).  
-5. Capture evidence of the tampering email and/or service restart in logs.  
+5. Capture evidence of the tampering **email** and/or MQTT `home/402102657/watchdog` and/or service restart in logs.  
 6. Reconnect the camera and show recovery.
 
 ```bash
@@ -114,14 +114,15 @@ journalctl -u human_detector -u web_server -n 50 --no-pager
 The detector updates `data/vision_heartbeat.json` (`ts`) only on **successful frames**. When Watchdog is enabled and the camera is expected to be capturing, if no fresh heartbeat arrives for **> 30 s**, the C coordinator:
 
 1. Sends a **camera tampering** email  
-2. Executes **`systemctl restart human_detector`**
+2. Publishes MQTT **`home/402102657/watchdog`** (QoS 1)  
+3. Executes **`systemctl restart human_detector`**
 
 ### Result
 
 | Phase | Observed behaviour |
 |-------|--------------------|
 | Normal operation | Heartbeat `ts` advances; no alarm |
-| Camera disconnected &gt; 30 s | Tampering email + `human_detector` restart |
+| Camera disconnected &gt; 30 s | Tampering email + MQTT `…/watchdog` + `human_detector` restart |
 | Camera reconnected | Capture and stream recover |
 
 **Media 4-3.** Watchdog reaction video (disconnect → alarm / restart).
@@ -139,49 +140,85 @@ The detector updates `data/vision_heartbeat.json` (`ts`) only on **successful fr
 ## Experiment 4-4 — Adaptive thermal management performance
 
 ### Requirement
-Demonstrate **adaptive heat management**. Use available **Linux tools** to raise processor temperature and include **functional images** of this section.
+Demonstrate **adaptive heat management**: raise CPU temperature with Linux tools, show that the system **throttles detection** (keeps the stream alive), and collect **functional screenshots**.
 
-### Procedure
-1. Enable Thermal (`thermal_on`) and keep Camera / detection running.  
-2. Raise CPU load with a Linux stress tool, for example:
+### Procedure (what to run)
+
+**A. Prep**
 
 ```bash
-sudo apt-get install -y stress-ng   # if needed
-stress-ng --cpu 0 --timeout 300s &
-curl -sk https://127.0.0.1:8443/api/v1/telemetry
-cat ~/embedded_project/data/thermal_control.json
+# services
+systemctl is-active web_server human_detector mosquitto_smartguard
+
+# MQTT listener (leave open — wait for thermal message)
+mosquitto_sub -h 127.0.0.1 -u smartguard -P smartguard \
+  -t 'home/402102657/thermal' -v
 ```
 
-3. When temperature crosses the enter threshold, screenshot telemetry, `thermal_control.json`, and/or the stream overlay (`THR… skip=…`).  
-4. Stop stress and show return toward normal operation below the clear threshold.
+Dashboard (`https://127.0.0.1:8443/`): Camera **ON**, Detection **ON**, Thermal **ENABLE**.
 
-On WSL, CPU temperature is often provided via the host helper used by `telemetry.c`; that helper should be running during the demo.
+**B. Heat the CPU (~3–5 minutes)**
+
+```bash
+sudo apt-get install -y stress-ng   # once
+stress-ng --cpu 0 --timeout 300s &
+```
+
+Watch temperature:
+
+```bash
+watch -n 2 'curl -sk https://127.0.0.1:8443/api/v1/telemetry; echo; cat ~/embedded_project/data/thermal_control.json 2>/dev/null'
+```
+
+**C. When hot (CPU ≥ 85 °C) — capture evidence**
+
+You should see:
+
+1. `thermal_control.json` with `"throttle_level": 1` (or `2`) and `"detect_every" > 1`  
+2. Stream overlay with `THR…` / `skip=…`  
+3. Email: *[Smart Guard] Thermal throttle active*  
+4. MQTT: `home/402102657/thermal {"thermal":true,"throttle_level":…}`  
+
+Screenshot → `fig/07_thermal_throttle.png` (telemetry + `thermal_control.json` and/or MQTT).  
+Screenshot → `fig/08_thermal_demo.png` (`stress-ng` terminal and/or dashboard/stream).
+
+**D. Cool down**
+
+```bash
+pkill stress-ng   # or wait for --timeout to finish
+```
+
+When temp **&lt; 78 °C**, `throttle_level` returns to `0` and detection runs every frame again.
+
+On WSL, make sure the Windows **host CPU temp helper** is feeding `telemetry` (otherwise temp may stay wrong and throttle never starts).
 
 ### Implementation
-Defaults in the Part 4 coordinator:
+Part 4 coordinator (`features_part4.c`) polls temperature each second:
 
-| Parameter | Default |
-|-----------|---------|
-| Enter throttle | **≥ 85 °C** (`THERMAL_TEMP_C`) |
-| Clear throttle | **&lt; 78 °C** (`THERMAL_CLEAR_C`) |
+| Parameter | Default | Config |
+|-----------|---------|--------|
+| Enter throttle | **≥ 85 °C** | `THERMAL_TEMP_C` |
+| Clear throttle | **&lt; 78 °C** | `THERMAL_CLEAR_C` |
 
-On enter, C writes `data/thermal_control.json`. The detector **skips YOLO on some frames** and may mildly reduce input size so the MJPEG stream stays responsive. An email is sent when throttling begins. Clearing below 78 °C restores normal detect frequency.
+When throttle **enters** (level 0 → 1/2):
+
+- Writes **`data/thermal_control.json`** for the detector (skip YOLO some frames / milder input size)  
+- Sends **email** + MQTT **`home/402102657/thermal`**  
+- MJPEG stream stays live (no long sleep of the pipeline)
 
 ### Result
 
-| Phase | Behaviour |
-|-------|-----------|
-| Cool (&lt; 78 °C) | `throttle_level` 0; detect every frame |
-| Hot (≥ 85 °C) | Throttle active; `detect_every` &gt; 1; thermal email |
-| After cooling | Control returns to normal |
+| Phase | Expected behaviour |
+|-------|--------------------|
+| Cool (&lt; 78 °C) | `throttle_level=0`, detect every frame |
+| Hot (≥ 85 °C) | Throttle on; `detect_every` &gt; 1; email + MQTT `…/thermal` |
+| After cool-down | Throttle cleared; normal detection |
 
-Adaptive management reduces detection load under heat instead of freezing the pipeline with long sleeps.
-
-**Figure 4-4a.** Telemetry / `thermal_control.json` while throttling.
+**Figure 4-4a.** Telemetry / `thermal_control.json` (and/or MQTT) while throttling.
 
 ![Figure 4-4a — Thermal throttle active](fig/07_thermal_throttle.png)
 
-**Figure 4-4b.** Functional view (dashboard overlay and/or `stress-ng` terminal).
+**Figure 4-4b.** Functional demo (`stress-ng` and/or dashboard stream overlay).
 
 ![Figure 4-4b — Thermal demo](fig/08_thermal_demo.png)
 
@@ -193,7 +230,7 @@ Adaptive management reduces detection load under heat instead of freezing the pi
 
 | No. | Experiment | Expected output | Evidence | Verdict |
 |-----|------------|-----------------|----------|---------|
-| **4-1** | Guard mode | Video + images | `fig/01_guard_mode.mp4`, `fig/02_guard_dashboard.png`, `fig/03_guard_alarm.png` | Pass |
+| **4-1** | Guard mode | Video + images | `fig/01_guard_mode.mp4`, `fig/02_guard_email.png`, `fig/03_guard_alarm.png` | Pass |
 | **4-2** | Black box | Image of DB events | `fig/04_blackbox_events.png` | Pass |
 | **4-3** | Software watchdog | Disconnect camera; video + image | `fig/05_watchdog.mp4`, `fig/06_watchdog_evidence.png` | Pass |
 | **4-4** | Adaptive thermal | Raise CPU temp; functional images | `fig/07_thermal_throttle.png`, `fig/08_thermal_demo.png` | Pass |
@@ -205,8 +242,8 @@ Adaptive management reduces detection load under heat instead of freezing the pi
 | File | Experiment |
 |------|------------|
 | `01_guard_mode.mp4` | 4-1 |
-| `02_guard_dashboard.png` | 4-1 |
-| `03_guard_alarm.png` | 4-1 |
+| `02_guard_email.png` | 4-1 (email) |
+| `03_guard_alarm.png` | 4-1 (MQTT) |
 | `04_blackbox_events.png` | 4-2 |
 | `05_watchdog.mp4` | 4-3 |
 | `06_watchdog_evidence.png` | 4-3 |
@@ -219,8 +256,8 @@ Adaptive management reduces detection load under heat instead of freezing the pi
 
 1. **Guard** — `guard_state` + count-increase alarms (email + `mqtt_publish_alarm`).  
 2. **Black box** — SQLite circular buffer in the detector; `GET /api/v1/blackbox`.  
-3. **Watchdog** — stale `vision_heartbeat.json` → tampering email + restart `human_detector`.  
-4. **Thermal** — `thermal_control.json` → YOLO skip / mild resize; email on enter throttle.
+3. **Watchdog** — stale `vision_heartbeat.json` → email + MQTT `…/watchdog` + restart `human_detector`.  
+4. **Thermal** — `thermal_control.json` → YOLO skip / mild resize; email + MQTT `…/thermal` on enter throttle.  
 
 ---
 

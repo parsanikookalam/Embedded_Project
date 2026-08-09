@@ -295,6 +295,8 @@ curl -sk -X POST https://127.0.0.1:8443/api/v1/command \
 | `home/<STUDENT_ID>/telemetry` | same-style telemetry JSON |
 | `home/<STUDENT_ID>/status` | retained `online` / LWT `offline` |
 | `home/<STUDENT_ID>/alarm` | Part 4 Guard alarm JSON |
+| `home/<STUDENT_ID>/watchdog` | Part 4 camera tampering / no-frame event |
+| `home/<STUDENT_ID>/thermal` | Part 4 thermal throttle event |
 
 ```bash
 mosquitto_sub -h 127.0.0.1 -u smartguard -P 'smartguard' -t 'home/#' -v
@@ -331,7 +333,9 @@ Open `https://127.0.0.1:8443/` after accepting the certificate warning.
 | Control | Meaning |
 |---------|---------|
 | **Camera** | Manual ON/OFF only (page load does not start the cam) |
-| **Guard** | Anti-theft: count increase → email + MQTT alarm |
+| **Guard** | Anti-theft: count increase → email + MQTT `…/alarm` |
+| **Watchdog** | Stale frames → email + MQTT `…/watchdog` + restart detector |
+| **Thermal** | Hot CPU → throttle YOLO + email + MQTT `…/thermal` |
 | **Watchdog** | Stalled frames → tamper email + restart detector |
 | **Thermal** | Hot CPU → skip YOLO frames / mild resize; clear when cool |
 

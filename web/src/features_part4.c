@@ -2,8 +2,9 @@
  * Part 4 — Anti-theft / Smart Guard features:
  *  1) Guard mode (when ARMED): person edge → email+photo + MQTT home/<id>/alarm
  *  2) Software watchdog (when ENABLED): no new frame >30s while capturing
- *     → "camera tampering" email + systemctl restart human_detector
- *  3) Adaptive thermal (when ENABLED): CPU ≥ threshold → cut YOLO res/FPS + email
+ *     → email + MQTT home/<id>/watchdog + systemctl restart human_detector
+ *  3) Adaptive thermal (when ENABLED): CPU ≥ threshold → cut YOLO res/FPS
+ *     → email + MQTT home/<id>/thermal
  */
 
 #include "features_part4.h"
@@ -203,14 +204,16 @@ static void *part4_thread(void *arg)
                              "Student ID: %s\n"
                              "No new camera frame for >%d seconds (mode=%s).\n"
                              "Last heartbeat ts=%ld age=%lds\n"
-                             "Restarting human_detector service.\n",
-                             g_student_id, g_watchdog_sec, mode, hb_ts, age);
+                             "Restarting human_detector service.\n"
+                             "MQTT topic: home/%s/watchdog\n",
+                             g_student_id, g_watchdog_sec, mode, hb_ts, age, g_student_id);
                     email_send_event("[Smart Guard] WARNING — camera tampering", body, 0);
+                    mqtt_publish_watchdog(mode, age, now);
                     last_watch_mail = now;
                     {
                         int rc = system("systemctl restart human_detector >/dev/null 2>&1");
-                        printf("[part4] watchdog email+restart rc=%d age=%ld mode=%s\n", rc, age,
-                               mode);
+                        printf("[part4] watchdog email+mqtt+restart rc=%d age=%ld mode=%s\n", rc,
+                               age, mode);
                     }
                 }
             }
@@ -233,9 +236,11 @@ static void *part4_thread(void *arg)
                     char body[512];
                     snprintf(body, sizeof(body),
                              "Adaptive thermal management\nCPU temp=%.2f C (threshold %.0f C).\n"
-                             "Throttle level=%d — run YOLO every N frames (stream stays live).\n",
-                             temp, g_thermal_on, throttle_level);
+                             "Throttle level=%d — run YOLO every N frames (stream stays live).\n"
+                             "MQTT topic: home/%s/thermal\n",
+                             temp, g_thermal_on, throttle_level, g_student_id);
                     email_send_event("[Smart Guard] Thermal throttle active", body, 0);
+                    mqtt_publish_thermal(throttle_level, temp, now);
                     last_thermal_mail = now;
                 }
             } else if (now - last_thermal_write >= 15) {

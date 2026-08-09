@@ -228,3 +228,57 @@ int mqtt_publish_alarm(int count, float cpu_temp, long timestamp)
     printf("[mqtt] ALARM → %s\n", topic);
     return 0;
 }
+
+int mqtt_publish_watchdog(const char *mode, long age_sec, long timestamp)
+{
+    char topic[160];
+    char payload[320];
+    int n;
+    int rc;
+    const char *m = mode ? mode : "unknown";
+
+    if (!g_mosq || !g_connected)
+        return -1;
+
+    snprintf(topic, sizeof(topic), "home/%s/watchdog", g_student);
+    n = snprintf(payload, sizeof(payload),
+                 "{\"watchdog\":true,\"event\":\"camera_tampering\",\"mode\":\"%s\","
+                 "\"age_sec\":%ld,\"timestamp\":%ld}",
+                 m, age_sec, timestamp);
+    if (n <= 0 || n >= (int)sizeof(payload))
+        return -1;
+
+    rc = mosquitto_publish(g_mosq, NULL, topic, (int)strlen(payload), payload, 1, false);
+    if (rc != MOSQ_ERR_SUCCESS) {
+        fprintf(stderr, "[mqtt] watchdog publish failed: %s\n", mosquitto_strerror(rc));
+        return -1;
+    }
+    printf("[mqtt] WATCHDOG → %s\n", topic);
+    return 0;
+}
+
+int mqtt_publish_thermal(int level, float cpu_temp, long timestamp)
+{
+    char topic[160];
+    char payload[280];
+    int n;
+    int rc;
+
+    if (!g_mosq || !g_connected)
+        return -1;
+
+    snprintf(topic, sizeof(topic), "home/%s/thermal", g_student);
+    n = snprintf(payload, sizeof(payload),
+                 "{\"thermal\":true,\"throttle_level\":%d,\"cpu_temp\":%.2f,\"timestamp\":%ld}",
+                 level, cpu_temp, timestamp);
+    if (n <= 0 || n >= (int)sizeof(payload))
+        return -1;
+
+    rc = mosquitto_publish(g_mosq, NULL, topic, (int)strlen(payload), payload, 1, false);
+    if (rc != MOSQ_ERR_SUCCESS) {
+        fprintf(stderr, "[mqtt] thermal publish failed: %s\n", mosquitto_strerror(rc));
+        return -1;
+    }
+    printf("[mqtt] THERMAL → %s level=%d\n", topic, level);
+    return 0;
+}
