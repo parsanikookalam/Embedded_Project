@@ -140,89 +140,98 @@ The detector updates `data/vision_heartbeat.json` (`ts`) only on **successful fr
 ## Experiment 4-4 — Adaptive thermal management performance
 
 ### Requirement
-Demonstrate **adaptive heat management**: raise CPU temperature with Linux tools, show that the system **throttles detection** (keeps the stream alive), and collect **functional screenshots**.
+Demonstrate **adaptive heat management** under high CPU temperature. Evidence must show **four** things:
 
-### Procedure (what to run)
+1. **MQTT** thermal event  
+2. **Email** thermal alert  
+3. **Lost / reduced FPS** on the live stream (throttle effect)  
+4. **`thermal_control.json`** while throttling  
 
-**A. Prep**
+### Procedure
+
+**1) Prep**
 
 ```bash
-# services
 systemctl is-active web_server human_detector mosquitto_smartguard
 
-# MQTT listener (leave open — wait for thermal message)
+# Terminal A — MQTT (leave open)
 mosquitto_sub -h 127.0.0.1 -u smartguard -P smartguard \
   -t 'home/402102657/thermal' -v
 ```
 
-Dashboard (`https://127.0.0.1:8443/`): Camera **ON**, Detection **ON**, Thermal **ENABLE**.
+Dashboard: Camera **ON**, Detection **ON**, Thermal **ENABLE**. Note normal FPS on the stream overlay (before heat).
 
-**B. Heat the CPU (~3–5 minutes)**
+**2) Raise temperature**
 
 ```bash
 sudo apt-get install -y stress-ng   # once
 stress-ng --cpu 0 --timeout 300s &
+
+watch -n 2 'curl -sk https://127.0.0.1:8443/api/v1/telemetry; echo; \
+  cat ~/embedded_project/data/thermal_control.json 2>/dev/null'
 ```
 
-Watch temperature:
+Wait until `cpu_temp` **≥ 85 °C** and throttle starts (`throttle_level` ≥ 1).
+
+**3) Capture the four figures (while hot)**
+
+| Figure | What to screenshot | Save as |
+|--------|--------------------|---------|
+| **4-4a MQTT** | `mosquitto_sub` line on `home/402102657/thermal` | `fig/07_thermal_mqtt.png` |
+| **4-4b Email** | Inbox / mail “Thermal throttle active” | `fig/08_thermal_email.png` |
+| **4-4c Lost FPS** | Stream overlay: lower **FPS** and/or `THR…` / `skip=` vs before | `fig/09_thermal_fps.png` |
+| **4-4d Control JSON** | `cat data/thermal_control.json` (`detect_every` &gt; 1) | `fig/10_thermal_control.json.png` |
+
+**4) Cool down**
 
 ```bash
-watch -n 2 'curl -sk https://127.0.0.1:8443/api/v1/telemetry; echo; cat ~/embedded_project/data/thermal_control.json 2>/dev/null'
+pkill stress-ng
 ```
 
-**C. When hot (CPU ≥ 85 °C) — capture evidence**
-
-You should see:
-
-1. `thermal_control.json` with `"throttle_level": 1` (or `2`) and `"detect_every" > 1`  
-2. Stream overlay with `THR…` / `skip=…`  
-3. Email: *[Smart Guard] Thermal throttle active*  
-4. MQTT: `home/402102657/thermal {"thermal":true,"throttle_level":…}`  
-
-Screenshot → `fig/07_thermal_throttle.png` (telemetry + `thermal_control.json` and/or MQTT).  
-Screenshot → `fig/08_thermal_demo.png` (`stress-ng` terminal and/or dashboard/stream).
-
-**D. Cool down**
-
-```bash
-pkill stress-ng   # or wait for --timeout to finish
-```
-
-When temp **&lt; 78 °C**, `throttle_level` returns to `0` and detection runs every frame again.
-
-On WSL, make sure the Windows **host CPU temp helper** is feeding `telemetry` (otherwise temp may stay wrong and throttle never starts).
+When temp **&lt; 78 °C**, `throttle_level` returns to `0` and FPS / detect rate recover.
 
 ### Implementation
-Part 4 coordinator (`features_part4.c`) polls temperature each second:
+Coordinator (`features_part4.c`) polls temperature each second:
 
-| Parameter | Default | Config |
-|-----------|---------|--------|
-| Enter throttle | **≥ 85 °C** | `THERMAL_TEMP_C` |
-| Clear throttle | **&lt; 78 °C** | `THERMAL_CLEAR_C` |
+| Parameter | Default |
+|-----------|---------|
+| Enter throttle | **≥ 85 °C** (`THERMAL_TEMP_C`) |
+| Clear throttle | **&lt; 78 °C** (`THERMAL_CLEAR_C`) |
 
-When throttle **enters** (level 0 → 1/2):
+On enter (level 0 → 1/2):
 
-- Writes **`data/thermal_control.json`** for the detector (skip YOLO some frames / milder input size)  
-- Sends **email** + MQTT **`home/402102657/thermal`**  
-- MJPEG stream stays live (no long sleep of the pipeline)
+| Action | Detail |
+|--------|--------|
+| MQTT | `home/402102657/thermal` — `thermal`, `throttle_level`, `cpu_temp`, `timestamp` |
+| Email | “[Smart Guard] Thermal throttle active” |
+| Control file | `data/thermal_control.json` — e.g. `detect_every=2` (lvl1) or `3` (lvl2) |
+| FPS effect | Detector runs YOLO less often → overlay **FPS drops** / shows `THR` + `skip=`; **stream stays live** |
 
 ### Result
 
-| Phase | Expected behaviour |
-|-------|--------------------|
-| Cool (&lt; 78 °C) | `throttle_level=0`, detect every frame |
-| Hot (≥ 85 °C) | Throttle on; `detect_every` &gt; 1; email + MQTT `…/thermal` |
-| After cool-down | Throttle cleared; normal detection |
+| Phase | MQTT / email | FPS / detect | `thermal_control.json` |
+|-------|--------------|--------------|-------------------------|
+| Cool (&lt; 78 °C) | No thermal event | Normal FPS; detect every frame | `throttle_level=0`, `detect_every=1` |
+| Hot (≥ 85 °C) | MQTT + email fire | **Lost FPS** (skip frames) | `throttle_level` 1–2, `detect_every` &gt; 1 |
+| After cool-down | — | FPS recovers | Back to level 0 |
 
-**Figure 4-4a.** Telemetry / `thermal_control.json` (and/or MQTT) while throttling.
+**Figure 4-4a.** MQTT `home/402102657/thermal`.
 
-![Figure 4-4a — Thermal throttle active](fig/07_thermal_throttle.png)
+![Figure 4-4a — Thermal MQTT](fig/07_thermal_mqtt.png)
 
-**Figure 4-4b.** Functional demo (`stress-ng` and/or dashboard stream overlay).
+**Figure 4-4b.** Thermal throttle **email**.
 
-![Figure 4-4b — Thermal demo](fig/08_thermal_demo.png)
+![Figure 4-4b — Thermal email](fig/08_thermal_email.png)
 
-**Verdict:** Pass (evidence: Figures 4-4a/b).
+**Figure 4-4c.** **Lost / reduced FPS** on stream overlay under throttle.
+
+![Figure 4-4c — Thermal lost FPS](fig/09_thermal_fps.png)
+
+**Figure 4-4d.** `thermal_control.json` while throttling.
+
+![Figure 4-4d — thermal_control.json](fig/10_thermal_control.json.png)
+
+**Verdict:** Pass (evidence: Figures 4-4a–d).
 
 ---
 
@@ -233,7 +242,7 @@ When throttle **enters** (level 0 → 1/2):
 | **4-1** | Guard mode | Video + images | `fig/01_guard_mode.mp4`, `fig/02_guard_email.png`, `fig/03_guard_alarm.png` | Pass |
 | **4-2** | Black box | Image of DB events | `fig/04_blackbox_events.png` | Pass |
 | **4-3** | Software watchdog | Disconnect camera; video + image | `fig/05_watchdog.mp4`, `fig/06_watchdog_evidence.png` | Pass |
-| **4-4** | Adaptive thermal | Raise CPU temp; functional images | `fig/07_thermal_throttle.png`, `fig/08_thermal_demo.png` | Pass |
+| **4-4** | Adaptive thermal | Raise CPU temp; MQTT + email + lost FPS + control JSON | `fig/07_thermal_mqtt.png`, `fig/08_thermal_email.png`, `fig/09_thermal_fps.png`, `fig/10_thermal_control.json.png` | Pass |
 
 ---
 
@@ -247,8 +256,10 @@ When throttle **enters** (level 0 → 1/2):
 | `04_blackbox_events.png` | 4-2 |
 | `05_watchdog.mp4` | 4-3 |
 | `06_watchdog_evidence.png` | 4-3 |
-| `07_thermal_throttle.png` | 4-4 |
-| `08_thermal_demo.png` | 4-4 |
+| `07_thermal_mqtt.png` | 4-4 (MQTT) |
+| `08_thermal_email.png` | 4-4 (email) |
+| `09_thermal_fps.png` | 4-4 (lost FPS) |
+| `10_thermal_control.json.png` | 4-4 (control JSON) |
 
 ---
 
