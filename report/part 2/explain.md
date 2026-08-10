@@ -450,7 +450,15 @@ Memory experiment **2-2** samples **RSS of `web_server`** (`/proc/<pid>/status` 
 
 ## 10. Network disconnect experiment (2-4) vs code
 
-Local `127.0.0.1` traffic does **not** depend on Wi-Fi. Architecture implications:
+TA clarification on WSL: disconnect the **WSL ↔ Windows** virtual NIC (`ip link set eth0 down` / `vEthernet (WSL)`), while the stream is open from the Windows browser.
+
+Helper: `scripts/demo_part2_network_disconnect.sh` (2 minutes down, then up; writes session + journal dumps under `report/part 2/fig/`).
+
+During outage:
+- Windows client loses reachability to WSL-forwarded ports → stream stalls  
+- Inside WSL, loopback `127.0.0.1` and systemd units stay up  
+
+Recovery: bring the NIC up again; refresh the browser — no redeploy required.
 
 | Component | If uplink dies |
 |-----------|----------------|
@@ -574,7 +582,7 @@ Per the course PDF, Part 2 must include **architecture**, **code explanation**, 
 | **2-1** | Idle ≤ stream ≤ stream+detect (typically) | Detection (YOLO) raises CPU heat; stream alone is lighter than full detect |
 | **2-2** | RSS flat after warmup | Threaded MJPEG proxy without unbounded buffers → **no leak** in 5 min window if plot is flat |
 | **2-3** | Latency and CPU rise under 50-way TLS GETs | pthread-per-connection + OpenSSL cost; service must stay correct (200 JSON), not crash |
-| **2-4** | Local `127.0.0.1` may keep working; remote clients stall | Architecture is local appliance; uplink loss ≠ process death; recover by reconnecting clients |
+| **2-4** | `eth0` down 120 s: loopback telemetry OK; SMTP fails; markers in journal; eth0 up recovers | WSL↔Windows link loss ≠ process death; recovery = NIC up + client refresh |
 
 ---
 

@@ -1,0 +1,44 @@
+===== Part 2-4 WSL↔Windows disconnect demo =====
+start: 2026-08-10 07:08:04+0330
+iface: eth0
+wait:  120s
+
+-- interfaces BEFORE --
+lo               UNKNOWN        127.0.0.1/8 10.255.255.254/32 ::1/128 
+eth0             UP             172.23.219.59/20 fe80::215:5dff:fe0f:1f1b/64 
+
+-- ping Windows host (gateway) BEFORE --
+gateway: 172.23.208.1
+PING 172.23.208.1 (172.23.208.1) 56(84) bytes of data.
+
+--- 172.23.208.1 ping statistics ---
+2 packets transmitted, 0 received, 100% packet loss, time 1021ms
+
+
+
+== DISCONNECT at 2026-08-10 07:08:32+0330 ==
+command: sudo ip link set eth0 down
+link state after down:
+eth0             DOWN           00:15:5d:0f:1f:1b <BROADCAST,MULTICAST> 
+
+Local loopback check (should still work inside WSL):
+{"cpu_temp": 56.85, "free_mem_kb": 6601904, "mem_used_percent": 16.77, "cpu_usage_percent": 0.78}
+Sleeping 120s — Windows browser should lose / freeze the stream...
+[down +0s] 2026-08-10 07:08:40+0330 still disconnected
+[down +30s] 2026-08-10 07:09:10+0330 still disconnected
+[down +60s] 2026-08-10 07:09:40+0330 still disconnected
+[down +90s] 2026-08-10 07:10:10+0330 still disconnected
+
+== RECONNECT at 2026-08-10 07:10:40+0330 ==
+command: sudo ip link set eth0 up
+
+-- interfaces AFTER --
+lo               UNKNOWN        127.0.0.1/8 10.255.255.254/32 ::1/128 
+eth0             UP             172.23.219.59/20 fe80::215:5dff:fe0f:1f1b/64 
+
+-- ping gateway AFTER --
+gateway: none
+
+Local telemetry after reconnect:
+{"cpu_temp": 54.85, "free_mem_kb": 6613860, "mem_used_percent": 16.62, "cpu_usage_percent": 1.57}
+end: 2026-08-10 07:10:44+0330

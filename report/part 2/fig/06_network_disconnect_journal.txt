@@ -1,0 +1,52 @@
+===== journal web_server / human_detector (last 5 min) =====
+Aug 10 07:08:49 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 0
+Aug 10 07:08:49 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:39922 - "GET /video_feed HTTP/1.1" 200 OK
+Aug 10 07:08:49 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 1
+Aug 10 07:08:49 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 0
+Aug 10 07:08:49 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:39926 - "GET /video_feed HTTP/1.1" 200 OK
+Aug 10 07:08:49 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 1
+Aug 10 07:08:50 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 0
+Aug 10 07:08:50 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:39932 - "GET /video_feed HTTP/1.1" 200 OK
+Aug 10 07:08:50 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 1
+Aug 10 07:08:50 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 0
+Aug 10 07:08:50 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:39948 - "GET /video_feed HTTP/1.1" 200 OK
+Aug 10 07:08:50 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 1
+Aug 10 07:08:50 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 0
+Aug 10 07:08:50 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:39964 - "GET /video_feed HTTP/1.1" 200 OK
+Aug 10 07:08:50 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 1
+Aug 10 07:08:50 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:39978 - "GET /video_feed HTTP/1.1" 200 OK
+Aug 10 07:08:50 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 2
+Aug 10 07:08:50 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 1
+Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:39980 - "GET /video_feed HTTP/1.1" 200 OK
+Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 2
+Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 1
+Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 0
+Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:39982 - "GET /video_feed HTTP/1.1" 200 OK
+Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 1
+Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 0
+Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:39996 - "GET /video_feed HTTP/1.1" 200 OK
+Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 1
+Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 0
+Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:40006 - "GET /video_feed HTTP/1.1" 200 OK
+Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 1
+Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 0
+Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:40018 - "GET /video_feed HTTP/1.1" 200 OK
+Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 1
+Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 0
+Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:40024 - "GET /video_feed HTTP/1.1" 200 OK
+Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 1
+Aug 10 07:08:52 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:40026 - "GET /video_feed HTTP/1.1" 200 OK
+Aug 10 07:08:52 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 2
+Aug 10 07:08:52 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 1
+Aug 10 07:08:53 DESKTOP-R0OFT4D python[117]: [cam] ON — opening webcam (stays on until camera_off)
+Aug 10 07:09:04 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 0
+Aug 10 07:09:07 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:41326 - "GET /video_feed HTTP/1.1" 200 OK
+Aug 10 07:09:07 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 1
+Aug 10 07:09:24 DESKTOP-R0OFT4D web_server[221]: [email] debounce[email] event send failed: Could not connect to server
+Aug 10 07:10:09 DESKTOP-R0OFT4D web_server[221]: [email] event send failed: Could not connect to server
+
+===== journal smartguard_part2_4 markers =====
+Aug 10 07:08:40 DESKTOP-R0OFT4D smartguard_part2_4[39995]: network_down iface=eth0 elapsed=0s
+Aug 10 07:09:10 DESKTOP-R0OFT4D smartguard_part2_4[40530]: network_down iface=eth0 elapsed=30s
+Aug 10 07:09:40 DESKTOP-R0OFT4D smartguard_part2_4[40822]: network_down iface=eth0 elapsed=60s
+Aug 10 07:10:10 DESKTOP-R0OFT4D smartguard_part2_4[41095]: network_down iface=eth0 elapsed=90s

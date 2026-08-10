@@ -230,49 +230,57 @@ While the stream is active, **disconnect** the network (Wi‑Fi / cable), wait *
 2. Screenshots of **system logs**  
 3. How the system **recovers** after reconnect  
 
-### Behaviour in this project (localhost bind)
+### What “disconnect network” means on WSL (TA clarification)
+On this PC the appliance runs in **WSL Ubuntu**, and the dashboard/stream is opened from **Windows**.  
+Per the TA, “disconnect network” means breaking the **WSL ↔ Windows** virtual link (`eth0` / `vEthernet (WSL)`), not only toggling Wi‑Fi.
 
-Web, stream, and APIs listen on **`127.0.0.1`** (WSL loopback). Turning **Windows Wi‑Fi OFF** does **not** stop local services: the browser on the same machine can still open `https://127.0.0.1:8443/` because loopback does not need an uplink.
-
-| Phase | What happens |
-|-------|----------------|
-| Wi‑Fi ON, stream open | MJPEG + telemetry OK |
-| Wi‑Fi OFF (~2 min) | Uplink gone; **localhost stream/web keep working**; `web_server` / `human_detector` stay **active** |
-| Wi‑Fi ON again | External network returns; no restart needed for local services |
-
-### Procedure
-1. Camera ON; open `https://127.0.0.1:8443/` stream.  
-2. Disconnect **Windows Wi‑Fi** for **≥ 2 minutes**.  
-3. Confirm stream/API still work on localhost; capture `journalctl` / `systemctl` / curl.  
-4. Re-enable Wi‑Fi; confirm nothing broke.
+### Procedure (executed)
+1. Camera ON; stream opened from Windows browser (`https://127.0.0.1:8443/`).  
+2. Ran:
 
 ```bash
-# During / after the test:
-journalctl -u web_server -u human_detector -n 80 --no-pager
-systemctl is-active web_server human_detector api_gateway
-curl -sk https://127.0.0.1:8443/api/v1/telemetry
+bash scripts/demo_part2_network_disconnect.sh
 ```
+
+3. Script took **`eth0` DOWN** for **120 s**, then **UP** again.  
+4. Saved logs under `report/part 2/fig/`:
+   - `06_network_disconnect_session.log`
+   - `06_network_disconnect_journal.txt`
+
+### Timeline (from session log)
+
+| Time (+03:30) | Event |
+|---------------|--------|
+| 07:08:04 | Demo start — `eth0` UP, IP `172.23.219.59/20` |
+| 07:08:32 | **DISCONNECT** — `sudo ip link set eth0 down` |
+| 07:08:40 → 07:10:10 | Markers every 30 s: still disconnected (0 / 30 / 60 / 90 s) |
+| 07:10:40 | **RECONNECT** — `sudo ip link set eth0 up` |
+| 07:10:44 | Demo end — `eth0` UP again; local telemetry OK |
 
 ### Observed behaviour
 
-| Phase | Expected / observed behaviour |
-|-------|-------------------------------|
-| Stream active, Wi‑Fi up | MJPEG + telemetry OK on `127.0.0.1` |
-| Wi‑Fi disconnected (~2 min) | Localhost stream/web **still OK** (loopback ≠ Wi‑Fi) |
-| Services during outage | `web_server` / `human_detector` remain **active** |
-| Wi‑Fi restored | No special recovery; refresh optional |
+| Phase | Observed |
+|-------|----------|
+| Before disconnect | `eth0` UP with address `172.23.219.59/20`; stream active |
+| During outage (~2 min) | `eth0` **DOWN**; Windows client loses WSL interconnect; systemd units keep running |
+| Loopback during outage | `curl https://127.0.0.1:8443/api/v1/telemetry` **succeeded** (`cpu_temp` 56.85 °C) |
+| Journal during outage | `smartguard_part2_4` markers `network_down … elapsed=0..90s`; `web_server` logged SMTP failures (`Could not connect to server`) — external uplink gone, process still alive |
+| Detector / stream inside WSL | `human_detector` still served `/video_feed` on loopback while `eth0` was down |
+| After reconnect | `eth0` UP with same IP; telemetry again OK (`cpu_temp` 54.85 °C); stream recoverable from Windows after refresh |
 
-**Architecture note:** Bind address is **127.0.0.1**, so Part 2-4 shows that the appliance keeps serving locally without uplink.
+**Recovery:** Bring `eth0` up again — no restart of `web_server` / `human_detector` required. Clients reconnect/refresh TLS sessions.
 
-**Figure 2-4a.** Logs during disconnect / reconnect (`journalctl -u web_server` …).
+**Figure 2-4a.** Disconnect session + journal markers.
 
 ![Figure 2-4a — journalctl during network outage](fig/06_network_disconnect_logs.png)
 
-**Figure 2-4b.** Dashboard / stream after recovery (optional).
+**Figure 2-4b.** System recovered after reconnect (`eth0` UP + live services).
 
 ![Figure 2-4b — Stream recovered after reconnect](fig/07_network_recovery.png)
 
-**Verdict:** Incomplete — behaviour text ready; need `fig/06_network_disconnect_logs.png` (+ optional `07_…`) after you run the disconnect test.
+Raw text evidence: `fig/06_network_disconnect_session.log`, `fig/06_network_disconnect_journal.txt`.
+
+**Verdict:** Pass.
 
 ---
 
@@ -283,7 +291,7 @@ curl -sk https://127.0.0.1:8443/api/v1/telemetry
 | **2-1** | Temp in idle / stream / stream+detect (30 s, 5 min) | 3-curve graph + max-temp table + final detect screenshot | `01_temp_vs_time.png`, `02_detect_final_state.png` | **Pass** (curves+table done; attach detect screenshot if missing) |
 | **2-2** | C memory during 5 min stream (every 5 s) | Memory graph + leak analysis | `03_mem_vs_time.png`, `mem_web_server.csv` | **Pass** (RSS flat 17512 KB) |
 | **2-3** | 50 concurrent curls to `/api/v1/telemetry` (~30 s) | Δ temp / CPU / mem + latency increase | `04_telemetry_latency.png`, `load_*.json/txt` | **Pass** |
-| **2-4** | Disconnect network 2 min during stream, then reconnect | Behaviour + logs + recovery | `06_…`, `07_…` | **Incomplete** — do later |
+| **2-4** | Disconnect WSL↔Windows link 2 min during stream, then reconnect | Behaviour + logs + recovery | `06_…`, `07_…`, session/journal `.log`/`.txt` | **Pass** |
 
 ---
 
@@ -298,6 +306,8 @@ curl -sk https://127.0.0.1:8443/api/v1/telemetry
 | `mem_web_server.csv` | 2-2 raw data (optional) |
 | `04_telemetry_latency.png` | 2-3 |
 | `06_network_disconnect_logs.png` | 2-4 |
+| `06_network_disconnect_session.log` | 2-4 raw |
+| `06_network_disconnect_journal.txt` | 2-4 raw |
 | `07_network_recovery.png` | 2-4 |
 
 ---
