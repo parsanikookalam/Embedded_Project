@@ -58,6 +58,15 @@ class CommandBody(BaseModel):
             "camera_off",
             "detection_on",
             "detection_off",
+            "resolution_160",
+            "resolution_256",
+            "resolution_320",
+            "resolution_480",
+            "resolution_640",
+            "fps_10",
+            "fps_15",
+            "fps_24",
+            "fps_30",
             "guard_on",
             "guard_off",
             "watchdog_on",
@@ -193,6 +202,11 @@ async def camera():
 @app.get("/api/v1/detection", summary="YOLO/face detection enabled (OFF = raw stream, no AI)")
 async def detection():
     return await _proxy_json("GET", "/api/v1/detection")
+
+
+@app.get("/api/v1/vision", summary="Part 3: dynamic YOLO input size + target FPS")
+async def vision():
+    return await _proxy_json("GET", "/api/v1/vision")
 
 
 @app.get("/api/v1/watchdog", summary="Part 4: software watchdog enabled")

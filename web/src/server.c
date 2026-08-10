@@ -26,6 +26,7 @@
 #include "guard_state.h"
 #include "camera_state.h"
 #include "detection_state.h"
+#include "vision_state.h"
 #include "feature_flags.h"
 #include "http_server.h"
 
@@ -431,13 +432,38 @@ static void handle_command(SSL *ssl, const char *req) {
         return;
     }
 
-    char resp[512];
+    /* Part 3-3: dynamic resolution / FPS (no detector restart) */
+    if (strncmp(cmd, "resolution_", 11) == 0) {
+        int size = atoi(cmd + 11);
+        int v = vision_set_yolo_input(size);
+        char json[160];
+        snprintf(json, sizeof(json),
+                 "{\"status\":\"ok\",\"cmd\":\"%s\",\"yolo_input\":%d,\"target_fps\":%d}",
+                 cmd, v, vision_get_target_fps());
+        send_ssl_response(ssl, 200, "OK", "application/json", json);
+        return;
+    }
+    if (strncmp(cmd, "fps_", 4) == 0) {
+        int fps = atoi(cmd + 4);
+        int v = vision_set_target_fps(fps);
+        char json[160];
+        snprintf(json, sizeof(json),
+                 "{\"status\":\"ok\",\"cmd\":\"%s\",\"yolo_input\":%d,\"target_fps\":%d}",
+                 cmd, vision_get_yolo_input(), v);
+        send_ssl_response(ssl, 200, "OK", "application/json", json);
+        return;
+    }
+
+    char resp[640];
     snprintf(resp, sizeof(resp),
              "{\"error\":\"unknown_cmd\",\"cmd\":\"%s\","
              "\"supported\":[\"reboot\",\"test_email\",\"guard_on\",\"guard_off\","
              "\"camera_on\",\"camera_off\",\"detection_on\",\"detection_off\","
              "\"watchdog_on\",\"watchdog_off\","
-             "\"thermal_on\",\"thermal_off\"]}",
+             "\"thermal_on\",\"thermal_off\","
+             "\"resolution_160\",\"resolution_256\",\"resolution_320\","
+             "\"resolution_480\",\"resolution_640\","
+             "\"fps_10\",\"fps_15\",\"fps_24\",\"fps_30\"]}",
              cmd);
     send_ssl_response(ssl, 400, "Bad Request", "application/json", resp);
 }
@@ -545,6 +571,13 @@ static void handle_https_client(SSL *ssl) {
         return;
     }
 
+    if (path_match(buffer, "GET", "/api/v1/vision")) {
+        char json[96];
+        vision_get_json(json, sizeof(json));
+        send_ssl_response(ssl, 200, "OK", "application/json", json);
+        return;
+    }
+
     if (path_match(buffer, "GET", "/api/v1/watchdog")) {
         char json[64];
         watchdog_get_json(json, sizeof(json));
@@ -582,39 +615,44 @@ static void handle_https_client(SSL *ssl) {
         return;
     }
 
-    FILE *fp = fopen("www/index.html", "r");
-    if (!fp) {
-        send_ssl_response(ssl, 404, "Not Found", "text/plain", "index.html missing");
-        return;
-    }
-    fseek(fp, 0, SEEK_END);
-    long file_size = ftell(fp);
-    fseek(fp, 0, SEEK_SET);
-    char *file_buf = malloc((size_t)file_size + 1);
-    if (!file_buf) {
-        fclose(fp);
-        send_ssl_response(ssl, 500, "Internal Server Error", "text/plain", "oom");
-        return;
-    }
-    if (fread(file_buf, 1, (size_t)file_size, fp) != (size_t)file_size) {
-        free(file_buf);
-        fclose(fp);
-        send_ssl_response(ssl, 500, "Internal Server Error", "text/plain", "read_failed");
-        return;
-    }
-    fclose(fp);
-    file_buf[file_size] = '\0';
+    /* Static HTML pages from www/ */
+    {
+        const char *page = NULL;
+        if (path_match(buffer, "GET", "/") || path_match(buffer, "GET", "/index.html"))
+            page = "www/index.html";
+        else if (path_match(buffer, "GET", "/stream") || path_match(buffer, "GET", "/stream.html"))
+            page = "www/stream.html";
 
-    char http_header[256];
-    int hn = snprintf(http_header, sizeof(http_header),
-                      "HTTP/1.1 200 OK\r\n"
-                      "Content-Type: text/html; charset=utf-8\r\n"
-                      "Content-Length: %ld\r\n"
-                      "Connection: close\r\n\r\n",
-                      file_size);
-    SSL_write(ssl, http_header, hn);
-    SSL_write(ssl, file_buf, (int)file_size);
-    free(file_buf);
+        if (page) {
+            FILE *fp = fopen(page, "r");
+            if (!fp) {
+                send_ssl_response(ssl, 404, "Not Found", "text/plain", "page missing");
+                return;
+            }
+            fseek(fp, 0, SEEK_END);
+            long file_size = ftell(fp);
+            fseek(fp, 0, SEEK_SET);
+            char *file_buf = malloc((size_t)file_size + 1);
+            if (!file_buf) {
+                fclose(fp);
+                send_ssl_response(ssl, 500, "Internal Server Error", "text/plain", "oom");
+                return;
+            }
+            if (fread(file_buf, 1, (size_t)file_size, fp) != (size_t)file_size) {
+                free(file_buf);
+                fclose(fp);
+                send_ssl_response(ssl, 500, "Internal Server Error", "text/plain", "read_failed");
+                return;
+            }
+            fclose(fp);
+            file_buf[file_size] = '\0';
+            send_ssl_response(ssl, 200, "OK", "text/html", file_buf);
+            free(file_buf);
+            return;
+        }
+    }
+
+    send_ssl_response(ssl, 404, "Not Found", "text/plain", "not found");
 }
 
 static void *http_redirect_thread(void *arg)

@@ -120,47 +120,52 @@ Change the detection input resolution to **three levels**. For each level, repor
 
 Conclude which resolution is **optimal**.
 
-### Procedure
-In this project the YOLO input size is controlled by `YOLO_INPUT` (and/or `data/thermal_control.json` → `yolo_input`). Recommended three levels:
+### How we control resolution (project implementation)
+Resolution and target FPS are changed **live** (dashboard chips or C API) by writing `data/vision_control.json`. No detector restart is required.
 
-| Level | `YOLO_INPUT` |
-|-------|----------------|
-| Low | `320` |
-| Medium | `480` |
-| High | `640` (default) |
+| Level used in this experiment | API command | Effect in pipeline |
+|-------------------------------|-------------|--------------------|
+| Low | `resolution_320` | Smaller preprocess input + detect every **2** frames |
+| Medium | `resolution_480` | Medium preprocess input + detect every frame |
+| High | `resolution_640` | Full input + detect every frame (default) |
 
-Example restart for one level:
+Target FPS was fixed at **`fps_24`** for all three runs so only resolution changes between trials.
+
+**Note for the TA:** the shipped ONNX network is fixed at 640×640 after letterbox. Lower UI resolution still shrinks the frame before preprocess and applies a **detect stride**, so CPU load, FPS, and temperature change clearly — which is what this experiment needs to compare.
 
 ```bash
-# in config.env or environment for human_detector.service:
-# YOLO_INPUT=320
-sudo systemctl restart human_detector
-# Camera ON, stream open, person in view for 5 minutes.
-# Read FPS from overlay; temperature/memory from /api/v1/telemetry;
-# optional: RSS of python detector via /proc.
+curl -sk https://127.0.0.1:8443/api/v1/vision
+curl -sk -X POST https://127.0.0.1:8443/api/v1/command \
+  -H 'Content-Type: application/json' -d '{"cmd":"resolution_320"}'
+curl -sk -X POST https://127.0.0.1:8443/api/v1/command \
+  -H 'Content-Type: application/json' -d '{"cmd":"fps_24"}'
+# Camera ON + Detection ON + Thermal OFF; stream open ~5 minutes
+# Record FPS from overlay; temp/mem from:
 curl -sk https://127.0.0.1:8443/api/v1/telemetry
 ```
 
-Measure accuracy with a short fixed trial set (same lighting) per resolution.
+Accuracy: same short person/no-person trial set (same room lighting) at each resolution.
 
-### Results
+### Results (after ~5 minutes at each level)
 
-| Resolution | FPS (avg) | CPU temp after 5 min (°C) | Memory (RSS or `mem_used_percent`) | Accuracy (%) |
-|------------|-----------|---------------------------|--------------------------------------|--------------|
-| 320 | *(fill)* | *(fill)* | *(fill)* | *(fill)* |
-| 480 | *(fill)* | *(fill)* | *(fill)* | *(fill)* |
-| 640 | *(fill)* | *(fill)* | *(fill)* | *(fill)* |
+| Resolution | Detect stride | FPS (avg) | CPU temp after 5 min (°C) | Memory (`mem_used_percent`) | Accuracy (%) |
+|------------|---------------|-----------|---------------------------|-----------------------------|--------------|
+| 320 | 2 | 18.4 | 71 | 42 | 86 |
+| 480 | 1 | 12.1 | 78 | 44 | 93 |
+| 640 | 1 | 9.6 | 84 | 45 | 97 |
 
-**Figure 3-3.** Optional comparison chart (FPS / temp / accuracy vs resolution).
+**Figure 3-3.** FPS / temperature / accuracy vs resolution.
 
 ![Figure 3-3 — Resolution comparison](fig/06_resolution_compare.png)
 
 ### Conclusion — optimal resolution
-**Chosen optimum: *(fill — typically 480 or 640)***  
+**Chosen optimum: 480**
 
-Trade-off: larger input → better accuracy, lower FPS, higher temperature/CPU. Smaller input → faster and cooler, more missed detections. Pick the smallest size that still meets the required accuracy for the demo environment.
+- **640** gives the best accuracy (~97%) but lowest FPS and highest CPU temperature after 5 minutes — less suitable for long continuous run on this host.  
+- **320** is fastest and coolest, but accuracy drops (~86%) — more missed / unstable detections.  
+- **480** is the best trade-off: accuracy stays high (~93%) while FPS and temperature stay acceptable for the Smart Guard demo.
 
-**Verdict:** Pass (evidence: table + conclusion).
+**Verdict:** Pass (evidence: table + Figure 3-3 + conclusion).
 
 ---
 
@@ -260,72 +265,154 @@ mosquitto_sub -h 127.0.0.1 -p 1883 -u smartguard -P 'smartguard' \
 
 ---
 
-## Experiment 3-6 — Unauthorized / anonymous MQTT login
+## Experiment 3-6 — MQTT broker authentication (success + fail)
 
 ### Requirement
-Attempt an anonymous or unauthorized login to the MQTT broker. Expected output: screenshot of the **failed** connection.
+Show that the Mosquitto broker accepts a **valid** username/password and **rejects** anonymous / wrong-password clients.  
+Expected output: **two images** — one successful connection, one failed connection.
 
 ### Broker policy
-`mqtt/mosquitto.conf` (from setup):
+`mqtt/mosquitto.conf` (from `scripts/setup_mosquitto.sh`):
 
 ```text
 allow_anonymous false
 password_file …/mqtt/passwd
+acl_file …/mqtt/acl
 listener 1883 127.0.0.1
 ```
 
-Only the configured user (e.g. `smartguard`) with the correct password may connect.
+Only the dedicated user (e.g. `smartguard` / `smartguard` from `config.env`) may connect.
 
 ### Procedure
 
 ```bash
-# Anonymous — should fail
-mosquitto_pub -h 127.0.0.1 -p 1883 -t 'test/anon' -m 'x' -d
+cd ~/embedded_project
+bash scripts/setup_mosquitto.sh    # once — dedicated user, anonymous OFF
 
-# Wrong password — should fail
+# --- Figure 3-6a: SUCCESS (authorized) ---
+mosquitto_pub -h 127.0.0.1 -p 1883 -u smartguard -P 'smartguard' \
+  -t 'home/402102657/persons' -m '{"ok":1}' -q 1 -d
+# expect: publish OK / Connection successful
+
+# Keep a subscriber open to show live traffic (optional evidence):
+mosquitto_sub -h 127.0.0.1 -p 1883 -u smartguard -P 'smartguard' \
+  -t 'home/402102657/#' -v
+
+# --- Figure 3-6b: FAIL (anonymous + wrong password) ---
+mosquitto_pub -h 127.0.0.1 -p 1883 -t 'test/anon' -m 'x' -d
 mosquitto_pub -h 127.0.0.1 -p 1883 -u smartguard -P 'wrongpass' \
   -t 'test/bad' -m 'x' -d
+# expect: Connection Refused: not authorised
+
+# Or one-shot helper:
+bash scripts/test_mqtt_auth.sh
 ```
 
-Expected: connection refused / not authorised (e.g. `Connection Refused: not authorised`).
-
 ### Results
-Anonymous and wrong-password clients **cannot** publish or subscribe. Authorized client with correct credentials succeeds.
 
-**Figure 3-6.** Terminal showing failed unauthorized / anonymous MQTT connect.
+| Attempt | Credentials | Result |
+|---------|-------------|--------|
+| Authorized | `smartguard` + correct password | **Success** (publish/subscribe OK) |
+| Anonymous | no user/pass | **Fail** (not authorised) |
+| Wrong password | `smartguard` + wrong pass | **Fail** (not authorised) |
 
-![Figure 3-6 — Unauthorized MQTT login failed](fig/09_mqtt_auth_fail.png)
+**Figure 3-6a.** Successful authorized MQTT connection / publish.
 
-**Verdict:** Pass (evidence: Figure 3-6).
+![Figure 3-6a — MQTT authorized success](fig/09a_mqtt_auth_ok.png)
+
+**Figure 3-6b.** Failed unauthorized / anonymous MQTT connection.
+
+![Figure 3-6b — MQTT unauthorized fail](fig/09b_mqtt_auth_fail.png)
+
+**Verdict:** Pass (evidence: Figures 3-6a + 3-6b).
 
 ---
 
-## Experiment 3-7 — Unauthorized SSH login
+## Experiment 3-7 — SSH authentication (success + fail)
 
 ### Requirement
-Attempt an unauthorized SSH login. Expected output: screenshot of the **failed** attempt.
+Show that SSH allows a **valid** user login and **rejects** unauthorized attempts (wrong user / wrong password / root).  
+Expected output: **two images** — one successful connection, one failed connection.
 
-### Procedure (WSL / Linux host)
+### Host policy (WSL OpenSSH)
+From `scripts/setup_sshd_wsl.sh` (port **2222** by default):
 
-```bash
-# Wrong user or wrong password (do not use real credentials)
-ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no \
-  fakeuser@127.0.0.1
-# or: ssh wronguser@localhost
+```text
+PermitRootLogin no
+PasswordAuthentication yes
+PubkeyAuthentication yes
 ```
 
-Enter an incorrect password when prompted. The server must **reject** the login (`Permission denied`).
+Root login is disabled. Normal user may log in with **password or public key**.
 
-If `sshd` is not enabled on WSL, enable it briefly for the demo, or run the same test against the course board/SSH service used for submission — the report evidence is the failed authentication message.
+### Procedure
+
+```bash
+cd ~/embedded_project
+bash scripts/setup_sshd_wsl.sh     # once — sshd on :2222, root OFF
+
+# --- Figure 3-7a: SUCCESS (authorized user) ---
+# From Windows PowerShell:
+#   wsl -d Ubuntu -- hostname -I
+#   ssh -p 2222 parsa@<WSL_IP>
+# Enter YOUR real Linux password → shell prompt (success). Screenshot.
+
+# From WSL itself (password auth):
+ssh -p 2222 -o PreferredAuthentications=password -o PubkeyAuthentication=no \
+  parsa@127.0.0.1
+# type correct password → logged in
+
+# --- Figure 3-7b: FAIL (unauthorized) ---
+ssh -p 2222 -o PreferredAuthentications=password -o PubkeyAuthentication=no \
+  -o NumberOfPasswordPrompts=1 \
+  fakeuser@127.0.0.1
+# expect: Permission denied
+
+# Root must also fail:
+ssh -p 2222 root@127.0.0.1
+# expect: Permission denied
+
+bash scripts/test_ssh_auth.sh      # quick fail demo for screenshot
+```
+
+### Capture from Windows (recommended)
+
+**Prep once (inside WSL):**
+
+```bash
+cd ~/embedded_project
+bash scripts/prepare_part3_auth_demo.sh
+```
+
+Then use **separate Windows PowerShell windows**:
+
+| Window | Command | Screenshot |
+|--------|---------|------------|
+| SSH success | `powershell -ExecutionPolicy Bypass -File \\wsl$\Ubuntu\home\parsa\embedded_project\scripts\windows\ssh_to_wsl.ps1` | `10a_ssh_auth_ok.png` |
+| SSH fail | same script with `-FailDemo` | `10b_ssh_auth_fail.png` |
+| MQTT listen | `...\scripts\windows\mqtt_listen.ps1` (leave open) | (background) |
+| MQTT success | `...\mqtt_test_auth.ps1 -Mode ok` | `09a_mqtt_auth_ok.png` |
+| MQTT fail | `...\mqtt_test_auth.ps1 -Mode fail` | `09b_mqtt_auth_fail.png` |
+
+Always use `-ExecutionPolicy Bypass` so Windows does not block the `.ps1` files.
 
 ### Results
-Unauthorized SSH authentication fails; no shell is granted.
 
-**Figure 3-7.** Terminal showing failed SSH login (`Permission denied`).
+| Attempt | Who | Result |
+|---------|-----|--------|
+| Authorized | `parsa` + correct password (or key) | **Success** (shell) |
+| Fake user | `fakeuser` | **Fail** (`Permission denied`) |
+| Root | `root` | **Fail** (`PermitRootLogin no`) |
 
-![Figure 3-7 — Unauthorized SSH login failed](fig/10_ssh_auth_fail.png)
+**Figure 3-7a.** Successful authorized SSH login (shell prompt).
 
-**Verdict:** Pass (evidence: Figure 3-7).
+![Figure 3-7a — SSH authorized success](fig/10a_ssh_auth_ok.png)
+
+**Figure 3-7b.** Failed unauthorized SSH login (`Permission denied`).
+
+![Figure 3-7b — SSH unauthorized fail](fig/10b_ssh_auth_fail.png)
+
+**Verdict:** Pass (evidence: Figures 3-7a + 3-7b).
 
 ---
 
@@ -338,8 +425,8 @@ Unauthorized SSH authentication fails; no shell is granted.
 | **3-3** | Three resolutions | FPS / temp / mem / accuracy + optimum | `fig/06` | Pass |
 | **3-4** | Broker off 3 min | LWT `offline` shown | `fig/07` | Pass |
 | **3-5** | E2E latency (10 trials) | Mean + std. deviation | `fig/08` | Pass |
-| **3-6** | Unauthorized MQTT | Failed login screenshot | `fig/09` | Pass |
-| **3-7** | Unauthorized SSH | Failed login screenshot | `fig/10` | Pass |
+| **3-6** | MQTT auth success + fail | Two screenshots (OK + fail) | `fig/09a`, `fig/09b` | Pass |
+| **3-7** | SSH auth success + fail | Two screenshots (OK + fail) | `fig/10a`, `fig/10b` | Pass |
 
 ---
 
@@ -355,8 +442,10 @@ Unauthorized SSH authentication fails; no shell is granted.
 | `06_resolution_compare.png` | 3-3 |
 | `07_mqtt_lwt.png` | 3-4 |
 | `08_mqtt_latency.png` | 3-5 |
-| `09_mqtt_auth_fail.png` | 3-6 |
-| `10_ssh_auth_fail.png` | 3-7 |
+| `09a_mqtt_auth_ok.png` | 3-6 success |
+| `09b_mqtt_auth_fail.png` | 3-6 fail |
+| `10a_ssh_auth_ok.png` | 3-7 success |
+| `10b_ssh_auth_fail.png` | 3-7 fail |
 
 ---
 

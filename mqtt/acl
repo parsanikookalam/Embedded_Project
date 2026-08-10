@@ -1,0 +1,3 @@
+user smartguard
+topic readwrite home/#
+topic read $SYS/#

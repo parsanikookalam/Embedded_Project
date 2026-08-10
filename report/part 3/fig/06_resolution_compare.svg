@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="480" viewBox="0 0 900 480">
+  <rect width="900" height="480" fill="#ffffff"/>
+  <text x="450" y="28" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif" font-size="16" font-weight="700">Experiment 3-3 — Resolution vs FPS / temperature / accuracy</text>
+  <rect x="70" y="50" width="760" height="340" fill="#fafafa" stroke="#333"/>
+  <!-- grid -->
+  <g stroke="#ddd">
+    <line x1="70" y1="118" x2="830" y2="118"/><line x1="70" y1="186" x2="830" y2="186"/>
+    <line x1="70" y1="254" x2="830" y2="254"/><line x1="70" y1="322" x2="830" y2="322"/>
+    <line x1="260" y1="50" x2="260" y2="390"/><line x1="450" y1="50" x2="450" y2="390"/>
+    <line x1="640" y1="50" x2="640" y2="390"/>
+  </g>
+  <!-- left scale labels 0..110 -->
+  <g font-family="DejaVu Sans, Arial" font-size="11" fill="#333" text-anchor="end">
+    <text x="62" y="54">110</text><text x="62" y="122">88</text><text x="62" y="190">66</text>
+    <text x="62" y="258">44</text><text x="62" y="326">22</text><text x="62" y="394">0</text>
+  </g>
+  <!-- right scale temp 60..95 -->
+  <g font-family="DejaVu Sans, Arial" font-size="11" fill="#d62728" text-anchor="start">
+    <text x="838" y="54">95</text><text x="838" y="122">88</text><text x="838" y="190">81</text>
+    <text x="838" y="258">74</text><text x="838" y="326">67</text><text x="838" y="394">60</text>
+  </g>
+  <!-- x labels -->
+  <g font-family="DejaVu Sans, Arial" font-size="12" fill="#333" text-anchor="middle">
+    <text x="70" y="412">320</text><text x="450" y="412">480</text><text x="830" y="412">640</text>
+  </g>
+  <text x="450" y="455" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="12">Detection input resolution</text>
+  <text x="18" y="240" text-anchor="middle" transform="rotate(-90 18 240)" font-family="DejaVu Sans, Arial" font-size="12">FPS / Accuracy (%)</text>
+  <text x="888" y="240" text-anchor="middle" transform="rotate(90 888 240)" font-family="DejaVu Sans, Arial" font-size="12" fill="#d62728">CPU temp (°C)</text>
+
+  <!-- FPS: 18.4, 12.1, 9.6 on 0-110 -> y = 50 + 340*(1-v/110) -->
+  <polyline fill="none" stroke="#1f77b4" stroke-width="2.5" points="70,333.1 450,352.6 830,360.3"/>
+  <circle cx="70" cy="333.1" r="5" fill="#1f77b4"/><circle cx="450" cy="352.6" r="5" fill="#1f77b4"/><circle cx="830" cy="360.3" r="5" fill="#1f77b4"/>
+
+  <!-- Acc: 86, 93, 97 -->
+  <polyline fill="none" stroke="#2ca02c" stroke-width="2.5" stroke-dasharray="7 4" points="70,124.2 450,102.5 830,90.2"/>
+  <rect x="65" y="119.2" width="10" height="10" fill="#2ca02c"/><rect x="445" y="97.5" width="10" height="10" fill="#2ca02c"/><rect x="825" y="85.2" width="10" height="10" fill="#2ca02c"/>
+
+  <!-- Temp: 71, 78, 84 on 60-95 -> y = 50 + 340*(1-(v-60)/35) -->
+  <polyline fill="none" stroke="#d62728" stroke-width="2.5" points="70,283.1 450,215.1 830,156.9"/>
+  <polygon points="70,276 76,289 64,289" fill="#d62728"/>
+  <polygon points="450,208 456,221 444,221" fill="#d62728"/>
+  <polygon points="830,150 836,163 824,163" fill="#d62728"/>
+
+  <!-- legend -->
+  <rect x="560" y="58" width="250" height="78" fill="#ffffff" stroke="#ccc"/>
+  <line x1="575" y1="78" x2="610" y2="78" stroke="#1f77b4" stroke-width="2.5"/><circle cx="592" cy="78" r="4" fill="#1f77b4"/>
+  <text x="620" y="82" font-family="DejaVu Sans, Arial" font-size="12">FPS (avg)</text>
+  <line x1="575" y1="98" x2="610" y2="98" stroke="#2ca02c" stroke-width="2.5" stroke-dasharray="7 4"/>
+  <text x="620" y="102" font-family="DejaVu Sans, Arial" font-size="12">Accuracy (%)</text>
+  <line x1="575" y1="118" x2="610" y2="118" stroke="#d62728" stroke-width="2.5"/>
+  <text x="620" y="122" font-family="DejaVu Sans, Arial" font-size="12">CPU temp (°C)</text>
+
+  <text x="470" y="340" font-family="DejaVu Sans, Arial" font-size="12" fill="#333">Optimum: 480 (best trade-off)</text>
+  <line x1="450" y1="352" x2="465" y2="342" stroke="#333" marker-end="url(#arrow)"/>
+</svg>

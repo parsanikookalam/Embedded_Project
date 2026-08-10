@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Smart Guard · Stream</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg0: #0b1014;
+      --panel: #162029;
+      --line: #2a3a48;
+      --text: #e8eef3;
+      --muted: #8aa0b2;
+      --accent: #3ecf8e;
+      --font: "Outfit", system-ui, sans-serif;
+      --mono: "IBM Plex Mono", ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      color: var(--text);
+      background: var(--bg0);
+      padding: 20px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      max-width: 1100px;
+      margin: 0 auto 16px;
+    }
+    h1 { margin: 0; font-size: 1.4rem; }
+    h1 span { color: var(--accent); }
+    a { color: var(--accent); text-decoration: none; font-size: 0.9rem; }
+    .frame {
+      max-width: 1100px;
+      margin: 0 auto;
+      background: #000;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      aspect-ratio: 4/3;
+    }
+    .frame img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .panel {
+      max-width: 1100px;
+      margin: 16px auto 0;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px 16px;
+    }
+    .lbl {
+      color: var(--muted);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin: 8px 0 6px;
+    }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+      font-family: var(--font);
+      font-weight: 600;
+      font-size: 0.85rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 14px;
+      cursor: pointer;
+      background: #121a21;
+      color: var(--text);
+    }
+    .chip.active {
+      background: rgba(62, 207, 142, 0.18);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .status { font-family: var(--mono); font-size: 0.8rem; color: var(--accent); margin-top: 10px; }
+    .hint { color: var(--muted); font-size: 0.8rem; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Smart <span>Guard</span> · Stream</h1>
+    <a href="/">← Dashboard</a>
+  </header>
+
+  <div class="frame">
+    <img id="stream-img" src="/api/v1/stream" alt="Live stream">
+  </div>
+
+  <div class="panel">
+    <div class="lbl">Target FPS</div>
+    <div class="chips" id="fps-chips">
+      <button type="button" class="chip" data-cmd="fps_10" onclick="visionCmd('fps_10')">10</button>
+      <button type="button" class="chip" data-cmd="fps_15" onclick="visionCmd('fps_15')">15</button>
+      <button type="button" class="chip" data-cmd="fps_24" onclick="visionCmd('fps_24')">24</button>
+      <button type="button" class="chip" data-cmd="fps_30" onclick="visionCmd('fps_30')">30</button>
+    </div>
+    <div class="lbl">YOLO resolution</div>
+    <div class="chips" id="res-chips">
+      <button type="button" class="chip" data-cmd="resolution_160" onclick="visionCmd('resolution_160')">160</button>
+      <button type="button" class="chip" data-cmd="resolution_256" onclick="visionCmd('resolution_256')">256</button>
+      <button type="button" class="chip" data-cmd="resolution_320" onclick="visionCmd('resolution_320')">320</button>
+      <button type="button" class="chip" data-cmd="resolution_480" onclick="visionCmd('resolution_480')">480</button>
+      <button type="button" class="chip" data-cmd="resolution_640" onclick="visionCmd('resolution_640')">640</button>
+    </div>
+    <div class="status" id="st-vision">vision: …</div>
+    <p class="hint">Uses <code>POST /api/v1/command</code> → <code>fps_*</code> / <code>resolution_*</code> · status <code>GET /api/v1/vision</code>. Camera must be ON.</p>
+  </div>
+
+  <script>
+    function markChips(groupId, activeCmd) {
+      document.querySelectorAll('#' + groupId + ' .chip').forEach(function (b) {
+        b.classList.toggle('active', b.getAttribute('data-cmd') === activeCmd);
+      });
+    }
+    function renderVision(v) {
+      var fps = v.target_fps | 0;
+      var yin = v.yolo_input | 0;
+      document.getElementById('st-vision').textContent =
+        'target_fps=' + fps + ' · yolo_input=' + yin;
+      markChips('fps-chips', 'fps_' + fps);
+      markChips('res-chips', 'resolution_' + yin);
+    }
+    function refreshVision() {
+      return fetch('/api/v1/vision').then(function (r) { return r.json(); }).then(renderVision);
+    }
+    function visionCmd(name) {
+      fetch('/api/v1/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cmd: name })
+      }).then(function () { return refreshVision(); });
+    }
+    refreshVision();
+    setInterval(refreshVision, 2000);
+  </script>
+</body>
+</html>

@@ -46,6 +46,7 @@ HEARTBEAT_JSON = os.path.join(DATA_DIR, "vision_heartbeat.json")
 THERMAL_CTRL_JSON = os.path.join(DATA_DIR, "thermal_control.json")
 CAMERA_STATE_JSON = os.path.join(DATA_DIR, "camera_state.json")
 DETECTION_STATE_JSON = os.path.join(DATA_DIR, "detection_state.json")
+VISION_CONTROL_JSON = os.path.join(DATA_DIR, "vision_control.json")
 BLACKBOX_CAPACITY = 500
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -66,6 +67,8 @@ YOLO_INPUT = int(os.getenv("YOLO_INPUT", "640"))
 YOLO_NMS = float(os.getenv("YOLO_NMS", "0.45"))
 # COCO class 0 = person
 YOLO_PERSON_CLASS = 0
+YOLO_NET_SIZE = 640
+_yolo_sizes_ok: dict = {}
 
 # MQTT is published by the C web_server (Part 3C) — not Python.
 
@@ -167,11 +170,8 @@ def _nms_boxes(boxes: List[Box], overlap_thresh: float = 0.4) -> List[Box]:
     ]
 
 
-def _detect_bodies_yolo(frame: np.ndarray, input_size: Optional[int] = None) -> List[Box]:
-    """YOLOv8 ONNX: output [1, 84, N] → person boxes (class 0)."""
-    assert yolo_net is not None
+def _letterbox_bgr(frame: np.ndarray, size: int) -> tuple:
     h0, w0 = frame.shape[:2]
-    size = int(input_size or YOLO_INPUT)
     scale = min(size / h0, size / w0)
     nw, nh = int(round(w0 * scale)), int(round(h0 * scale))
     resized = cv2.resize(frame, (nw, nh), interpolation=cv2.INTER_LINEAR)
@@ -179,12 +179,49 @@ def _detect_bodies_yolo(frame: np.ndarray, input_size: Optional[int] = None) -> 
     pad_x = (size - nw) // 2
     pad_y = (size - nh) // 2
     canvas[pad_y : pad_y + nh, pad_x : pad_x + nw] = resized
+    return canvas, scale, pad_x, pad_y
 
-    blob = cv2.dnn.blobFromImage(
-        canvas, scalefactor=1 / 255.0, size=(size, size), swapRB=True, crop=False
-    )
-    yolo_net.setInput(blob)
-    out = yolo_net.forward()
+
+def _detect_bodies_yolo(frame: np.ndarray, input_size: Optional[int] = None) -> List[Box]:
+    """YOLOv8 ONNX: output [1, 84, N] → person boxes (class 0)."""
+    assert yolo_net is not None
+    h0, w0 = frame.shape[:2]
+    want = snap_yolo_input(int(input_size or YOLO_INPUT))
+
+    # Shrink source when user picks 320/480 so lower res is cheaper / less accurate.
+    proc = frame
+    back_scale = 1.0
+    if want < YOLO_NET_SIZE:
+        s = want / float(max(h0, w0))
+        if s < 1.0:
+            proc = cv2.resize(frame, (max(1, int(w0 * s)), max(1, int(h0 * s))))
+            back_scale = 1.0 / s
+
+    net_size = YOLO_NET_SIZE
+    used_dynamic = False
+    if _yolo_sizes_ok.get(want, True) and want != YOLO_NET_SIZE:
+        try:
+            canvas, scale, pad_x, pad_y = _letterbox_bgr(proc, want)
+            blob = cv2.dnn.blobFromImage(
+                canvas, scalefactor=1 / 255.0, size=(want, want), swapRB=True, crop=False
+            )
+            yolo_net.setInput(blob)
+            out = yolo_net.forward()
+            net_size = want
+            used_dynamic = True
+            _yolo_sizes_ok[want] = True
+        except Exception as exc:
+            _yolo_sizes_ok[want] = False
+            print(f"[yolo] input {want} unsupported ({exc}); shrink+{YOLO_NET_SIZE}")
+
+    if not used_dynamic:
+        canvas, scale, pad_x, pad_y = _letterbox_bgr(proc, net_size)
+        blob = cv2.dnn.blobFromImage(
+            canvas, scalefactor=1 / 255.0, size=(net_size, net_size), swapRB=True, crop=False
+        )
+        yolo_net.setInput(blob)
+        out = yolo_net.forward()
+
     preds = np.squeeze(out)
     if preds.ndim != 2:
         return []
@@ -203,10 +240,10 @@ def _detect_bodies_yolo(frame: np.ndarray, input_size: Optional[int] = None) -> 
     boxes_xywh: List[List[float]] = []
     for row in sel:
         cx, cy, bw, bh = map(float, row[:4])
-        x = (cx - bw / 2.0 - pad_x) / scale
-        y = (cy - bh / 2.0 - pad_y) / scale
-        w = bw / scale
-        h = bh / scale
+        x = (cx - bw / 2.0 - pad_x) / scale * back_scale
+        y = (cy - bh / 2.0 - pad_y) / scale * back_scale
+        w = bw / scale * back_scale
+        h = bh / scale * back_scale
         boxes_xywh.append([x, y, w, h])
 
     indices = cv2.dnn.NMSBoxes(boxes_xywh, confidences, DNN_CONF, YOLO_NMS)
@@ -402,6 +439,51 @@ def read_thermal_control() -> dict:
         }
 
 
+def snap_yolo_input(size: int) -> int:
+    s = int(size or YOLO_INPUT)
+    if s <= 160:
+        return 160
+    if s <= 256:
+        return 256
+    if s <= 320:
+        return 320
+    if s <= 480:
+        return 480
+    return 640
+
+
+def vision_detect_stride(yolo_in: int) -> int:
+    """
+    Our yolov8n.onnx is exported at 640×640. Smaller UI resolutions shrink the
+    frame (accuracy↓) and also run YOLO less often so FPS↑ is visible.
+    """
+    if yolo_in <= 160:
+        return 4
+    if yolo_in <= 256:
+        return 3
+    if yolo_in <= 320:
+        return 2
+    if yolo_in <= 480:
+        return 1
+    return 1
+
+
+def read_vision_control() -> dict:
+    """Part 3-3: dynamic YOLO size + target FPS from C API / dashboard cmds."""
+    out = {"yolo_input": YOLO_INPUT, "target_fps": 24}
+    try:
+        with open(VISION_CONTROL_JSON, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            if data.get("yolo_input") is not None:
+                out["yolo_input"] = snap_yolo_input(int(data["yolo_input"]))
+            if data.get("target_fps") is not None:
+                out["target_fps"] = max(1, min(60, int(data["target_fps"])))
+    except Exception:
+        pass
+    return out
+
+
 def _parse_enabled(data: dict) -> bool:
     v = data.get("enabled", False)
     if isinstance(v, str):
@@ -527,6 +609,7 @@ last_chunk_sent_at = 0.0
 
 last_recorded_count = None
 last_history_ts = 0
+_last_logged_vision = None
 
 
 def add_viewer() -> int:
@@ -685,10 +768,26 @@ def detect_humans() -> None:
                 continue
             read_fail_streak = 0
 
+            loop_t0 = time.time()
             thermal = read_thermal_control()
-            yolo_in = int(thermal.get("yolo_input") or YOLO_INPUT)
-            detect_every = max(1, int(thermal.get("detect_every") or 1))
+            vision = read_vision_control()
             thr_lvl = int(thermal.get("throttle_level") or 0)
+            yolo_in = snap_yolo_input(int(vision.get("yolo_input") or YOLO_INPUT))
+            target_fps = float(vision.get("target_fps") or 24)
+            # Resolution stride makes lower sizes actually faster (ONNX is fixed 640).
+            detect_every = vision_detect_stride(yolo_in)
+            if thr_lvl > 0:
+                yolo_in = snap_yolo_input(int(thermal.get("yolo_input") or yolo_in))
+                detect_every = max(detect_every, int(thermal.get("detect_every") or 1))
+
+            global _last_logged_vision
+            vkey = (yolo_in, int(target_fps), detect_every, thr_lvl)
+            if vkey != _last_logged_vision:
+                print(
+                    f"[vision] file={VISION_CONTROL_JSON} yolo_input={yolo_in} "
+                    f"stride={detect_every} target_fps={target_fps} thermal={thr_lvl}"
+                )
+                _last_logged_vision = vkey
 
             # Fresh frame arrived — this is what resets the watchdog timer
             write_heartbeat("capturing", touch_ts=True)
@@ -696,23 +795,28 @@ def detect_humans() -> None:
             det_on = detection_enabled()
             detect_ms = 0.0
             if not det_on:
-                # Detection toggle OFF — do not run YOLO/face at all
                 last_dets = []
                 stable = 0
                 count_buffer.clear()
                 thr_tag = " | DET OFF"
                 dets = []
             else:
-                # Thermal: skip YOLO some frames (keep stream live).
                 run_detect = (frame_i % detect_every) == 0
                 frame_i += 1
                 if run_detect:
                     t0 = time.time()
-                    last_dets = detect_people(frame, input_size=yolo_in)
+                    try:
+                        last_dets = detect_people(frame, input_size=yolo_in)
+                    except Exception as det_exc:
+                        print(f"[det] frame error (kept stream): {det_exc}")
+                        last_dets = last_dets if last_dets else []
                     detect_ms = (time.time() - t0) * 1000.0
                     count_buffer.append(len(last_dets))
                     stable = sorted(count_buffer)[len(count_buffer) // 2]
-                thr_tag = f" | THR{thr_lvl} skip={detect_every}" if thr_lvl else ""
+                thr_tag = ""
+                if thr_lvl:
+                    thr_tag += f" | THR{thr_lvl}"
+                thr_tag += f" | in={yolo_in} stride={detect_every} capFps={target_fps:.0f}"
                 dets = last_dets
 
             for (box, kind) in dets:
@@ -761,7 +865,7 @@ def detect_humans() -> None:
             body_face = f"{BODY_KIND}+{FACE_KIND}" if det_on else "OFF (no AI)"
             cv2.putText(
                 frame,
-                f"detector: {body_face}  in={yolo_in if det_on else 0}",
+                f"detector: {body_face}  pipe={yolo_in if det_on else 0} stride={detect_every if det_on else 0}",
                 (10, 72),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.45,
@@ -793,6 +897,12 @@ def detect_humans() -> None:
             # Always publish camera frame → stream stays smooth under thermal load
             with frame_lock:
                 output_frame = frame.copy()
+
+            # Dynamic FPS cap (Part 3) — paced after work, does not block MQTT/heartbeat logic long
+            period = 1.0 / max(1.0, float(target_fps))
+            spent = time.time() - loop_t0
+            if spent < period:
+                time.sleep(period - spent)
         except Exception as exc:
             print(f"[cam] loop error (recovering, camera kept if ON): {exc}")
             # Keep old frame timestamp so watchdog can still fire

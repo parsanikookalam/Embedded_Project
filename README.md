@@ -298,6 +298,12 @@ curl -sk -X POST https://127.0.0.1:8443/api/v1/command \
 | `home/<STUDENT_ID>/watchdog` | Part 4 camera tampering / no-frame event |
 | `home/<STUDENT_ID>/thermal` | Part 4 thermal throttle event |
 
+Auth: dedicated Mosquitto user (`MQTT_USER` / `MQTT_PASS`); **`allow_anonymous false`**. Setup: `bash scripts/setup_mosquitto.sh`. Auth fail demo: `bash scripts/test_mqtt_auth.sh`.
+
+SSH (Part 3-7): `bash scripts/setup_sshd_wsl.sh` (port **2222**, **PermitRootLogin no**, password or pubkey). From Windows: `scripts/windows/ssh_to_wsl.ps1`. Unauthorized: `bash scripts/test_ssh_auth.sh`.
+
+Vision (Part 3-3): `GET /api/v1/vision`, cmds `resolution_320|480|640`, `fps_10|15|24|30`.
+
 ```bash
 mosquitto_sub -h 127.0.0.1 -u smartguard -P 'smartguard' -t 'home/#' -v
 ```

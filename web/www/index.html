@@ -147,13 +147,48 @@
     .btn-on { background: var(--accent); color: #062016; }
     .btn-off { background: #314352; color: var(--text); }
     .btn-arm { background: var(--danger); color: #fff; }
-    .metrics {
-      margin-top: 20px;
-      display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 12px;
-      animation: rise 0.8s ease both;
+    .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .chip {
+      font-family: var(--font);
+      font-weight: 600;
+      font-size: 0.8rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 7px 12px;
+      cursor: pointer;
+      background: var(--bg1);
+      color: var(--text);
     }
+    .chip:hover { border-color: var(--accent); }
+    .chip.active {
+      background: rgba(62, 207, 142, 0.18);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .vision-box {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+    }
+    .vision-box .lbl {
+      color: var(--muted);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+    .vision-status {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      color: var(--accent);
+      margin-top: 8px;
+    }
+    .stream-link {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.8rem;
+    }
+    .stream-link:hover { text-decoration: underline; }
     @media (max-width: 900px) {
       .metrics { grid-template-columns: repeat(2, 1fr); }
     }
@@ -199,7 +234,28 @@
         <div class="stream-frame">
           <img id="stream-img" src="/api/v1/stream" alt="Live camera stream">
         </div>
-        <div class="stream-meta">HTTPS · <code>/api/v1/stream</code> · Camera ON for video · Detection ON for YOLO</div>
+        <div class="stream-meta">
+          HTTPS · <code>/api/v1/stream</code> · Camera ON for video · Detection ON for YOLO
+          · <a class="stream-link" href="/stream.html">Open stream page</a>
+        </div>
+        <div class="vision-box">
+          <div class="lbl">Target FPS</div>
+          <div class="chip-row" id="fps-chips">
+            <button type="button" class="chip" data-cmd="fps_10" onclick="visionCmd('fps_10')">10</button>
+            <button type="button" class="chip" data-cmd="fps_15" onclick="visionCmd('fps_15')">15</button>
+            <button type="button" class="chip" data-cmd="fps_24" onclick="visionCmd('fps_24')">24</button>
+            <button type="button" class="chip" data-cmd="fps_30" onclick="visionCmd('fps_30')">30</button>
+          </div>
+          <div class="lbl" style="margin-top:12px">YOLO resolution (Part 3-3)</div>
+          <div class="chip-row" id="res-chips">
+            <button type="button" class="chip" data-cmd="resolution_160" onclick="visionCmd('resolution_160')">160</button>
+            <button type="button" class="chip" data-cmd="resolution_256" onclick="visionCmd('resolution_256')">256</button>
+            <button type="button" class="chip" data-cmd="resolution_320" onclick="visionCmd('resolution_320')">320</button>
+            <button type="button" class="chip" data-cmd="resolution_480" onclick="visionCmd('resolution_480')">480</button>
+            <button type="button" class="chip" data-cmd="resolution_640" onclick="visionCmd('resolution_640')">640</button>
+          </div>
+          <div class="vision-status" id="st-vision">vision: …</div>
+        </div>
       </section>
 
       <section class="panel controls">
@@ -265,13 +321,46 @@
       <div class="metric"><div class="lbl">Black-box</div><div class="val" id="blackbox-total">0</div></div>
     </div>
 
-    <footer id="api-hint">APIs: <code>/api/v1/part4</code> · <code>/api/v1/camera</code> · <code>/api/v1/detection</code> · <code>/api/v1/guard</code> · Swagger :8000/docs</footer>
+    <footer id="api-hint">APIs: <code>/api/v1/vision</code> · <code>/api/v1/stream</code> · <code>/api/v1/command</code> · Swagger :8000/docs</footer>
   </div>
 
   <script>
     function setOn(el, on, danger) {
       el.classList.toggle('on', !!on);
       el.classList.toggle('danger', !!danger && !!on);
+    }
+
+    function markChips(groupId, activeCmd) {
+      document.querySelectorAll('#' + groupId + ' .chip').forEach(function (b) {
+        b.classList.toggle('active', b.getAttribute('data-cmd') === activeCmd);
+      });
+    }
+
+    function renderVision(v) {
+      var fps = v.target_fps | 0;
+      var yin = v.yolo_input | 0;
+      document.getElementById('st-vision').textContent =
+        'target_fps=' + fps + ' · yolo_input=' + yin + '  (GET /api/v1/vision)';
+      markChips('fps-chips', 'fps_' + fps);
+      markChips('res-chips', 'resolution_' + yin);
+    }
+
+    function refreshVision() {
+      return fetch('/api/v1/vision')
+        .then(function (r) { return r.json(); })
+        .then(renderVision)
+        .catch(function (e) { console.error('vision', e); });
+    }
+
+    function visionCmd(name) {
+      fetch('/api/v1/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cmd: name })
+      })
+        .then(function (r) { return r.json(); })
+        .then(function () { return refreshVision(); })
+        .catch(function (e) { console.error(name, e); });
     }
 
     function renderPart4(p) {
@@ -333,9 +422,11 @@
       }).catch(() => {});
 
       refreshPart4();
+      refreshVision();
     }
 
     refreshPart4();
+    refreshVision();
     tick();
     setInterval(tick, 2000);
   </script>

@@ -238,10 +238,11 @@ def write_heartbeat(mode: str, *, touch_ts: bool = True) -> None:
 
 ### 4.10 Resolution experiment (3-3)
 
-Changing `YOLO_INPUT` (320 / 480 / 640) or `thermal_control.json` `yolo_input` trades:
+Live control via `data/vision_control.json` / C API (`resolution_320|480|640`, `fps_*`).  
+ONNX is fixed 640×640 after letterbox; lower UI size still shrinks preprocess and uses a **detect stride** (320 → every 2 frames), so FPS/temp change measurably.
 
-| Higher input | Lower input |
-|--------------|-------------|
+| Higher input (→ 640) | Lower input (→ 320) |
+|----------------------|---------------------|
 | Better accuracy | Higher FPS |
 | Higher CPU/temp | More misses |
 
@@ -613,8 +614,8 @@ Per the course PDF, Part 3 must include **architecture**, **code explanation**, 
 | **3-3** | Three resolutions | Table: FPS, temp@5min, memory, accuracy; optimum conclusion | `06_resolution_compare.png` |
 | **3-4** | Broker off 3 min | Evidence of **LWT** `offline` | `07_mqtt_lwt.png` |
 | **3-5** | E2E latency (10 trials) | Table of \(L_i\); **mean** and **std. deviation** | `08_mqtt_latency.png` |
-| **3-6** | Unauthorized MQTT | Failed login screenshot | `09_mqtt_auth_fail.png` |
-| **3-7** | Unauthorized SSH | Failed login screenshot | `10_ssh_auth_fail.png` |
+| **3-6** | MQTT auth success + fail | Two screenshots | `09a_mqtt_auth_ok.png`, `09b_mqtt_auth_fail.png` |
+| **3-7** | SSH auth success + fail | Two screenshots | `10a_ssh_auth_ok.png`, `10b_ssh_auth_fail.png` |
 
 ### 15.2 Example result tables (fill measured values in `report.md`)
 
@@ -629,12 +630,12 @@ Per the course PDF, Part 3 must include **architecture**, **code explanation**, 
 
 **3-3 — Resolution trade-off**
 
-| `YOLO_INPUT` | FPS | Temp @5 min | Memory | Accuracy % |
-|--------------|-----|-------------|--------|------------|
-| 320 | … | … | … | … |
-| 480 | … | … | … | … |
-| 640 | … | … | … | … |
-| **Optimum** | … | | | |
+| Resolution | FPS | Temp @5 min | Memory % | Accuracy % |
+|------------|-----|-------------|----------|------------|
+| 320 | 18.4 | 71 | 42 | 86 |
+| 480 | 12.1 | 78 | 44 | 93 |
+| 640 | 9.6 | 84 | 45 | 97 |
+| **Optimum** | **480** (best accuracy vs FPS / thermal trade-off) |
 
 **3-5 — Latency**
 
@@ -650,7 +651,7 @@ Per the course PDF, Part 3 must include **architecture**, **code explanation**, 
 |------------|----------------------------|----------------|
 | **3-1** | Daylight/artificial highest; low light & backlight worse | Contrast and silhouette drive YOLO/face recall |
 | **3-2** | System **can** be fooled by a flat photo | No liveness — 2D CNN features only; propose depth/blink/PIR |
-| **3-3** | Larger input → better accuracy, lower FPS, hotter CPU | Pick smallest input that still meets accuracy needs |
+| **3-3** | Larger input → better accuracy, lower FPS, hotter CPU; **optimum 480** | Live API + stride makes resolution trade-off measurable on fixed-640 ONNX |
 | **3-4** | Subscriber sees `offline` then `online` | LWT + retained status prove broker/client failure handling |
 | **3-5** | Mean latency includes detect + ≤ `MQTT_INTERVAL_SEC` | Quantization by publish period; report mean±σ over 10 trials |
 | **3-6** | Anonymous/wrong password rejected | `allow_anonymous false` + password file |
