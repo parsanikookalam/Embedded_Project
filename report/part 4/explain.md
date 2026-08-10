@@ -40,7 +40,7 @@ Dashboard toggles: **Guard / Watchdog / Thermal / Camera**.
                     │    ┌─────────┼─────────┬─────────────┐       │
                     │    ▼         ▼         ▼             ▼       │
                     │  Guard    Watchdog   Thermal     (reads)     │
-                    │  edge     heartbeat  temp≥85     persons.json│
+                    │  edge     heartbeat  temp≥80     persons.json│
                     │  email+   email+     write       telemetry   │
                     │  MQTT     restart    thermal_    heartbeat   │
                     │  alarm    detector   control.json            │
@@ -283,7 +283,7 @@ def append_history(count: int, ts: int, *, bump_total: bool = False) -> None:
 `GET /api/v1/blackbox` response shape (from `server.c`):
 
 ```json
-{"total_human_events": 123, "stored": 45, "capacity": 500}
+{"total_human_events": 132, "stored": 47, "capacity": 500}
 ```
 
 - `total_human_events` — from SQLite `meta` table (lifetime counter)  
@@ -370,9 +370,9 @@ A wedged OpenCV `VideoCapture` often will not recover in-process after USB loss.
 
 From `features_part4.c` / `config.env`:
 
-| Name | Default | Meaning |
-|------|---------|---------|
-| `THERMAL_TEMP_C` | **85** | Enter / raise throttle |
+| Name | Default (current config) | Meaning |
+|------|--------------------------|---------|
+| `THERMAL_TEMP_C` | **80** | Enter / raise throttle |
 | `THERMAL_CLEAR_C` | **78** | Hysteresis clear to level 0 |
 
 Hysteresis avoids flapping around a single point.
@@ -381,15 +381,15 @@ Hysteresis avoids flapping around a single point.
 
 `write_thermal_control(level, temp)` creates `data/thermal_control.json`:
 
-| level | `yolo_input` | `detect_every` | Intent |
-|-------|--------------|----------------|--------|
-| 0 | 640 | 1 | Full detect |
-| 1 | 640 | 2 | Run YOLO every 2nd frame |
-| 2 | 416 | 3 | Mildly smaller + every 3rd frame |
+| level | `yolo_input` | `detect_every` | `target_fps` | Intent |
+|-------|--------------|----------------|--------------|--------|
+| 0 | 640 | 1 | 0 (no override) | Full detect |
+| 1 | 640 | 2 | 12 | YOLO every 2nd frame; soft FPS cap |
+| 2 | 416 | 4 | **5** | Smaller input + stride 4; hard cap ~5 FPS |
 
-`frame_sleep_ms` is kept **0** on purpose: sleeping the capture loop made the MJPEG stream look frozen on WSL. Skipping inference keeps the pipeline live.
+`frame_sleep_ms` is kept **0** on purpose: sleeping the capture loop made the MJPEG stream look frozen on WSL. Skipping inference / capping FPS keeps the pipeline live.
 
-Level 2 is chosen when `temp >= THERMAL_TEMP_C + 8` (hotter band).
+Level 2 is chosen when `temp >= THERMAL_TEMP_C + 8` (≈ **88 °C** with the current 80 °C enter threshold).
 
 ### 8.3 Source: write control file + throttle decision (`features_part4.c`)
 
@@ -398,17 +398,20 @@ static void write_thermal_control(int level, float temp)
 {
     int yolo = 640;
     int detect_every = 1;
+    int target_fps = 0;
     if (level >= 2) {
         yolo = 416;
-        detect_every = 3;
+        detect_every = 4;
+        target_fps = 5;
     } else if (level == 1) {
         yolo = 640;
         detect_every = 2;
+        target_fps = 12;
     }
     fprintf(fp,
             "{\"throttle_level\":%d,\"cpu_temp\":%.2f,\"yolo_input\":%d,"
-            "\"detect_every\":%d,\"frame_sleep_ms\":0}\n",
-            level, temp, yolo, detect_every);
+            "\"detect_every\":%d,\"target_fps\":%d,\"frame_sleep_ms\":0}\n",
+            level, temp, yolo, detect_every, target_fps);
 }
 
 /* in part4_thread: */
@@ -437,7 +440,7 @@ detect_every = max(1, int(thermal["detect_every"]))
 run_detect = (frame_i % detect_every) == 0
 ```
 
-Overlay may show `THR{level} skip={detect_every}`.
+Overlay may show `THR{level}` plus stride / `target_fps` (e.g. level 2 → **`target_fps=5`**).
 
 ### 8.5 Email on enter
 
@@ -523,7 +526,7 @@ These limits protect SMTP and journal spam during demos.
 ## 13. Configuration keys (Part 4)
 
 ```env
-THERMAL_TEMP_C=85
+THERMAL_TEMP_C=80
 THERMAL_CLEAR_C=78
 WATCHDOG_SEC=30
 STUDENT_ID=402102657
@@ -549,7 +552,7 @@ Camera on + WD on → unplug cam → heartbeat stale → mail + restart → repl
 
 ### 14.4 Thermal
 
-Thermal on → `stress-ng` → temp≥85 → `thermal_control.json` level≥1 → overlay THR / lower detect rate → cool below 78 → level 0.
+Thermal on → `stress-ng` → temp≥80 → `thermal_control.json` level≥1 → overlay THR / lower detect rate (level 2 → `target_fps=5`) → cool below 78 → level 0.
 
 ---
 
@@ -608,21 +611,22 @@ Per the course PDF, Part 4 must include **architecture**, **code explanation**, 
 
 ### 17.2 Example evidence tables
 
-**4-2 — Black box snapshot**
+**4-2 — Black box snapshot (typical measured run)**
 
-| Field | Example |
-|-------|---------|
-| `total_human_events` | from `/api/v1/blackbox` |
-| `stored` | current rows (≤ 500) |
+| Field | Observed |
+|-------|----------|
+| `total_human_events` | **132** |
+| `stored` | **47** (≤ 500) |
 | `capacity` | 500 |
 
 **4-4 — Thermal phases**
 
-| Phase | Temp | `throttle_level` | `detect_every` |
-|-------|------|------------------|----------------|
-| Cool | &lt; 78 °C | 0 | 1 |
-| Hot | ≥ 85 °C | 1 or 2 | 2 or 3 |
-| Clear | falling &lt; 78 | 0 | 1 |
+| Phase | Temp | `throttle_level` | `detect_every` | `target_fps` | Observed FPS |
+|-------|------|------------------|----------------|--------------|--------------|
+| Cool | &lt; 78 °C | 0 | 1 | (vision default) | ~12–18 |
+| Hot | ≥ 80 °C | 1 | 2 | 12 | reduced / `THR1` |
+| Very hot | ≥ ~88 °C | 2 | 4 | **5** | ~5 / `THR2` |
+| Clear | falling &lt; 78 | 0 | 1 | (cleared) | recovers |
 
 ---
 
@@ -633,7 +637,7 @@ Per the course PDF, Part 4 must include **architecture**, **code explanation**, 
 | **4-1** | Count increase → email + MQTT `…/alarm` while Guard armed | Edge trigger (not “always while count≥1”) gives fast anti-theft without waiting Part 3’s 30 s debounce |
 | **4-2** | Events remain in SQLite after count returns to 0 | Circular buffer = bounded “flight recorder” for review |
 | **4-3** | After &gt;30 s without frames (camera disconnected) → tamper mail + detector restart | Heartbeat `ts` must **not** refresh on failed reads (`touch_ts=False`) |
-| **4-4** | Under stress heat, overlay shows `THR` / skip; stream stays live | Skipping YOLO beats sleeping the pipeline; hysteresis 85/78 avoids flap |
+| **4-4** | Under stress heat, overlay shows `THR` / skip; stream stays live | Skipping YOLO + FPS cap beats sleeping the pipeline; hysteresis **80/78** avoids flap; very hot → **`target_fps=5`** |
 
 ---
 
@@ -645,7 +649,7 @@ Per the course PDF, Part 4 must include **architecture**, **code explanation**, 
 | 2 | Thermal throttle **froze** MJPEG | **Severe** | Heavy `sleep` / tiny resolution in pipeline | Write `detect_every` + mild `yolo_input`; **`frame_sleep_ms=0`** |
 | 3 | Guard vs Part 3 email conflict confusion | Medium | Two email paths | Document: presence debounce ~30 s; Guard on **count increase** ~2 s gap |
 | 4 | Camera disconnect leaves dead OpenCV handle | High | USB/usbipd detach | Watchdog `systemctl restart human_detector`; UI Camera OFF/ON |
-| 5 | Hard to reach 85 °C on some demos | Medium | Cool laptop / WSL temp source | Keep HostCpuTemp running; optional temporary lower `THERMAL_TEMP_C` for demo (note in report) |
+| 5 | Hard to reach 80+ °C on some demos | Medium | Cool laptop / WSL temp source | Keep HostCpuTemp running; optional temporary lower `THERMAL_TEMP_C` for demo (note in report) |
 | 6 | Black box vs history confusion | Low | Two APIs | `/history` = last 5; `/blackbox` = totals + capacity + stored count |
 | 7 | Defaults: WD/thermal ON when files missing | Low (surprise) | `feature_flags.c` returns enabled if file absent | Document defaults; explicit `watchdog_off` / `thermal_off` if needed |
 
@@ -660,7 +664,7 @@ Part 4 implements four appliance behaviours in one C coordinator thread (`featur
 | **Guard** | Person-count **increase** → fast email + MQTT `home/<ID>/alarm` |
 | **Black box** | Circular SQLite history (capacity 500) via `/api/v1/blackbox` |
 | **Watchdog** | Stale non-idle heartbeat → tamper email + `systemctl restart human_detector` |
-| **Thermal** | ≥85 °C throttle / &lt;78 °C clear via `thermal_control.json` (YOLO skip, stream stays live) |
+| **Thermal** | ≥80 °C throttle / &lt;78 °C clear via `thermal_control.json` (YOLO skip, `target_fps=5` at level 2; stream stays live) |
 
 Together with Parts 1–3, this completes the Smart Guard System as specified in the course PDF.
 

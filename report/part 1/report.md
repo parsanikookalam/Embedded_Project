@@ -9,7 +9,7 @@
 | Platform | WSL Ubuntu Linux (accepted alternative to Orange Pi) |
 | HTTP / HTTPS ports | `8080` / `8443` (equivalent to 80 / 443 on Orange Pi) |
 
-This report follows the PDF table **“Mandatory experiments of the first part”** in order (**1-1** through **6-1**). Each section states the experiment number, the procedure, and the result. Figures and the autostart video are placed under `report/part 1/fig/` (to be attached with the submission).
+This report follows the PDF table **“Mandatory experiments of the first part”** in order (**1-1** through **1-6**). Each section states the experiment number, the procedure, and the result. Figures and the autostart video are under `report/part 1/fig/`.
 
 ---
 
@@ -43,10 +43,10 @@ systemctl is-active web_server
 | Metric | Notes |
 |--------|--------|
 | Total boot time | Too short on WSL for a useful Orange Pi–style table |
-| `web_server.service` share | See optional Figure 1-1 if captured |
-| Auto-start evidence | **See Experiment 1-3 video** |
+| `web_server.service` share | Optional `fig/01_boot_blame.png` if captured |
+| Auto-start evidence | **See Experiment 1-3 video** (`fig/03_autostart.mp4`) |
 
-**Figure 1-1 (optional).** Terminal output of `systemd-analyze` / `blame` if available.
+**Figure 1-1 (optional on WSL).** Terminal output of `systemd-analyze` / `blame`.
 
 ![Figure 1-1 — Boot analysis (optional on WSL; primary proof in 1-3)](fig/01_boot_blame.png)
 
@@ -91,16 +91,14 @@ Power the board off and on once. Provide a **video** of the system booting and t
 2. Start screen recording (e.g. Game Bar, OBS, or phone camera).
 3. Open Ubuntu (WSL) from the Start menu **without** typing `systemctl start`, `./web_server`, or similar.
 4. Optionally show on camera: `systemctl is-active web_server` and/or the dashboard at `https://127.0.0.1:8443/`.
-5. Save the recording as `fig/03_autostart.mp4` (or attach the link below).
+5. Evidence video: `fig/03_autostart.mp4`.
 
 ### Result
 Because Experiment **1-1** cannot show a useful board boot-time table on WSL, **this video is the primary proof** that the service stack auto-starts after a full power-off / power-on cycle with no manual start commands. systemd enables `web_server` (and related units) at boot via `enable`.
 
-**Media 1-3.** Autostart video path / link:
+**Media 1-3.** Autostart video:
 
 `report/part 1/fig/03_autostart.mp4`
-
-**Video URL (if submitted online):** *(add if used)*
 
 **Verdict:** Pass (evidence: Media 1-3).
 
@@ -198,11 +196,11 @@ The dashboard loads over HTTPS and displays the student ID **402102657** (and st
 
 ---
 
-## Evidence file names (add under `fig/`)
+## Evidence files (`fig/`)
 
 | File | Experiment |
 |------|------------|
-| `01_boot_blame.png` | 1-1 (optional) |
+| `01_boot_blame.png` | 1-1 (optional on WSL) |
 | `02_kill9_restart.png` | 1-2 |
 | `03_autostart.mp4` | 1-3 |
 | `04_http_301_inspect.png` | 1-4 |
@@ -225,3 +223,9 @@ The dashboard loads over HTTPS and displays the student ID **402102657** (and st
 
 - Course PDF: *Final Project — Embedded Systems*, table “Mandatory experiments of the first part”  
 - `web/src/server.c`, `services/web_server.service`, `scripts/gen_ssl.sh`
+
+---
+
+## Conclusion (Part 1)
+
+Part 1 delivers a **C HTTPS appliance** with self-signed identity (**CN = 402102657**), permanent HTTP→HTTPS redirect, HTML dashboard, and **systemd autostart** (`Restart=always`). On WSL, boot-blame (1-1) is N/A; autostart after `wsl --shutdown` is proven by Media 1-3. Experiments **1-2 … 1-6** are complete with evidence under `fig/`.

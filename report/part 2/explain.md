@@ -373,6 +373,7 @@ The PDF allows Python for Swagger. The gateway:
 Part 2 report includes a short section on this page plus a **screen-recording video**:
 
 - **Watch:** `report/part 2/fig/08_swagger_api_demo.mp4`  
+- **Still:** `report/part 2/fig/08_swagger_api_demo.png`  
 - Show: open `/docs`, expand endpoints, **Try it out** on `telemetry` / `persons` / `command`
 
 ### 7.3 Proxy helpers
@@ -552,7 +553,7 @@ Per the course PDF, Part 2 must include **architecture**, **code explanation**, 
 | **2-2** | C memory during 5 min stream (every 5 s) | Memory-vs-time graph; leak analysis | `03_mem_vs_time.png`, `mem_web_server.csv` |
 | **2-3** | 50 concurrent curls to `/api/v1/telemetry` | Tables: Δ temp/CPU/mem; latency mean/max/increase | `04_telemetry_latency.png`, `load_*.json/txt` |
 | **2-4** | Network disconnect 2 min during stream | Behaviour + logs + recovery | `06_network_disconnect_logs.png`, `07_network_recovery.png`, session `.log` + journal `.txt` |
-| **Swagger** | OpenAPI docs via gateway | Short explanation + **demo video** of `/docs` | `08_swagger_api_demo.mp4`, optional `08_swagger_api_page.png` |
+| **Swagger** | OpenAPI docs via gateway | Short explanation + **demo video** + still of `/docs` | `08_swagger_api_demo.mp4`, `08_swagger_api_demo.png` |
 
 ### 16.2 Measured result tables (see also `report.md`)
 
@@ -622,7 +623,7 @@ Per the course PDF, Part 2 must include **architecture**, **code explanation**, 
    **Fix:** each run refreshes:
    - `report/part 2/fig/06_network_disconnect_session.log`
    - `report/part 2/fig/06_network_disconnect_journal.txt`  
-   Student attaches PNG screenshots of those files + real browser recovery as `06_…png` / `07_…png`.
+   Screenshot / export those files as `06_network_disconnect_logs.png` and browser recovery as `07_network_recovery.png`.
 
 ---
 

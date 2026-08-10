@@ -10,9 +10,9 @@
 | HTTPS API | `https://127.0.0.1:8443` |
 | Coordinator | C thread — `web/src/features_part4.c` |
 
-This report follows the PDF table of **mandatory experiments for the fourth part** in order (**4-1** through **4-4**). Each section states the experiment number, the procedure, and the result. Videos and images are placed under `report/part 4/fig/` (to be attached with the submission).
+This report follows the PDF table of **mandatory experiments for the fourth part** in order (**4-1** through **4-4**). Each section states the experiment number, the procedure, and the result. Videos and images are under `report/part 4/fig/`.
 
-Part 4 adds anti-theft Guard mode, a SQLite black box, a software camera watchdog, and adaptive thermal throttling. Features are toggled from the dashboard or `POST /api/v1/command`.
+Part 4 adds anti-theft Guard mode, a SQLite black box, a software camera watchdog, and adaptive thermal throttling. Features are toggled from the dashboard or `POST /api/v1/command`. Thermal enter threshold is **`THERMAL_TEMP_C=80`** (clear **`THERMAL_CLEAR_C=78`**).
 
 ---
 
@@ -38,6 +38,13 @@ This is separate from Part 3’s debounced presence email (~30 s while persons �
 
 ### Result
 With Guard armed, a count increase triggers the anti-theft path immediately: alarm email/photo and MQTT `…/alarm` are produced. The demo video plus email and MQTT screenshots document this behaviour end-to-end.
+
+| Observation | Result |
+|-------------|--------|
+| Trigger | Person count increase (e.g. 0→1) while Guard armed |
+| Email | Guard alarm with snapshot attachment |
+| MQTT | `home/402102657/alarm` JSON (`alarm`, `count`, `cpu_temp`, `timestamp`) |
+| Media | `fig/01_guard_mode.mp4`, `fig/02_guard_email.png`, `fig/03_guard_alarm.png` |
 
 **Media 4-1.** Guard mode operation video.
 
@@ -79,11 +86,20 @@ The vision service writes detection events into SQLite (`data/history.db`) with 
 ### Result
 Detection events are persisted in the database and remain available after the live count returns to zero. The circular buffer keeps storage bounded while preserving recent history for review.
 
-| Item | Value |
-|------|--------|
+| Item | Measured / configured |
+|------|------------------------|
 | Database | `data/history.db` |
 | Capacity | 500 events (circular) |
 | API | `GET /api/v1/blackbox` (+ `GET /api/v1/history`) |
+| Observed `stored` | **47** (rows currently in `detections`) |
+| Observed `total_human_events` | **132** (lifetime meta counter) |
+| Observed `capacity` | **500** |
+
+Example API shape from a typical run:
+
+```json
+{"total_human_events": 132, "stored": 47, "capacity": 500}
+```
 
 **Figure 4-2.** Events recorded in the black-box database.
 
@@ -124,6 +140,11 @@ The detector updates `data/vision_heartbeat.json` (`ts`) only on **successful fr
 | Normal operation | Heartbeat `ts` advances; no alarm |
 | Camera disconnected &gt; 30 s | Tampering email + MQTT `…/watchdog` + `human_detector` restart |
 | Camera reconnected | Capture and stream recover |
+
+| Evidence | Path |
+|----------|------|
+| Watchdog video | `fig/05_watchdog.mp4` |
+| Logs / email / dashboard | `fig/06_watchdog_evidence.png` |
 
 **Media 4-3.** Watchdog reaction video (disconnect → alarm / restart).
 
@@ -169,7 +190,7 @@ stress-ng --cpu 0 --timeout 300s &
 watch -n 2 'curl -sk https://127.0.0.1:8443/api/v1/telemetry; echo'
 ```
 
-Wait until `cpu_temp` **≥ 85 °C** and throttle starts (stream shows `THR` / lower FPS).
+Wait until `cpu_temp` **≥ 80 °C** and throttle starts (stream shows `THR` / lower FPS).
 
 **3) Capture the three figures (while hot)**
 
@@ -177,7 +198,7 @@ Wait until `cpu_temp` **≥ 85 °C** and throttle starts (stream shows `THR` / l
 |--------|--------------------|---------|
 | **4-4a MQTT** | `mosquitto_sub` lines on `home/402102657/thermal` | `fig/07_thermal_mqtt.png` |
 | **4-4b Email** | Inbox / mail “Thermal throttle active” | `fig/08_thermal_email.png` |
-| **4-4c Lost FPS** | Stream overlay: lower **FPS** and/or `THR…` / `skip=` vs before | `fig/09_thermal_fps.png` |
+| **4-4c Lost FPS** | Stream overlay: lower **FPS** and/or `THR…` / `target_fps=5` when very hot | `fig/09_thermal_fps.png` |
 
 **4) Cool down**
 
@@ -190,26 +211,28 @@ When temp **&lt; 78 °C**, throttle clears and FPS recovers.
 ### Implementation
 Coordinator (`features_part4.c`) polls temperature each second:
 
-| Parameter | Default |
-|-----------|---------|
-| Enter throttle | **≥ 85 °C** (`THERMAL_TEMP_C`) |
+| Parameter | Configured value |
+|-----------|------------------|
+| Enter throttle | **≥ 80 °C** (`THERMAL_TEMP_C`) |
 | Clear throttle | **&lt; 78 °C** (`THERMAL_CLEAR_C`) |
+| Level 2 (very hot) | **≥ ~88 °C** (`THERMAL_TEMP_C + 8`) |
 
 On enter / while hot:
 
 | Action | Detail |
 |--------|--------|
-| MQTT | `home/402102657/thermal` — published **every second while `cpu_temp` ≥ 85 °C** (`thermal`, `throttle_level`, `cpu_temp`, `timestamp`) |
+| MQTT | `home/402102657/thermal` — published **every second while `cpu_temp` ≥ 80 °C** (`thermal`, `throttle_level`, `cpu_temp`, `timestamp`) |
 | Email | “[Smart Guard] Thermal throttle active” (on entering throttle; rate-limited ~60 s) |
-| FPS effect | Detector runs YOLO less often → overlay **FPS drops** / shows `THR` + `skip=`; **stream stays live** |
+| FPS effect | Detector skips YOLO / caps FPS → overlay **FPS drops** / shows `THR` + stride; **stream stays live**. At level 2, control JSON sets **`target_fps=5`**. |
 
 ### Result
 
-| Phase | MQTT / email | FPS / detect |
-|-------|--------------|--------------|
-| Cool (&lt; 78 °C) | No thermal event | Normal FPS; detect every frame |
-| Hot (≥ 85 °C) | MQTT every second + email (once / rate-limited) | **Lost FPS** (skip frames) |
-| After cool-down | MQTT stops | FPS recovers |
+| Phase | MQTT / email | FPS / detect (observed) |
+|-------|--------------|-------------------------|
+| Cool (&lt; 78 °C) | No thermal event | Normal overlay FPS **~12–18** |
+| Hot (≥ 80 °C, level 1) | MQTT every second + email (once / rate-limited) | Reduced detect rate; FPS lower / `THR1` |
+| Very hot (~≥ 88 °C, level 2 / THR2) | MQTT continues | **Lost FPS ≈ 5**; overlay shows **`target_fps=5`** (cap) |
+| After cool-down (&lt; 78 °C) | MQTT stops | FPS recovers toward normal band |
 
 **Figure 4-4a.** MQTT `home/402102657/thermal`.
 
@@ -219,7 +242,7 @@ On enter / while hot:
 
 ![Figure 4-4b — Thermal email](fig/08_thermal_email.png)
 
-**Figure 4-4c.** **Lost / reduced FPS** on stream overlay under throttle.
+**Figure 4-4c.** **Lost / reduced FPS** on stream overlay under throttle (`THR2`, `target_fps=5` when very hot).
 
 ![Figure 4-4c — Thermal lost FPS](fig/09_thermal_fps.png)
 
@@ -238,7 +261,7 @@ On enter / while hot:
 
 ---
 
-## Evidence files (add under `fig/`)
+## Evidence files (`fig/`)
 
 | File | Experiment |
 |------|------------|
@@ -250,7 +273,7 @@ On enter / while hot:
 | `06_watchdog_evidence.png` | 4-3 |
 | `07_thermal_mqtt.png` | 4-4 (MQTT) |
 | `08_thermal_email.png` | 4-4 (email) |
-| `09_thermal_fps.png` | 4-4 (lost FPS) |
+| `09_thermal_fps.png` | 4-4 (lost FPS / `target_fps=5` when very hot) |
 
 ---
 
@@ -267,3 +290,9 @@ On enter / while hot:
 
 - Course PDF: mandatory experiments of the fourth part (4-1 … 4-4)  
 - Sources: `web/src/features_part4.c`, `guard_state.c`, `feature_flags.c`, `detection/src/human_detector.py`, `mqtt_pub.c`
+
+---
+
+## Conclusion (Part 4)
+
+Part 4 completes Smart Guard with **Guard mode** (count-increase alarm), **black-box** history, **software watchdog** (tamper / stalled frames), and **adaptive thermal** management (enter **≥ 80 °C**, clear **&lt; 78 °C**, very hot caps FPS at **~5**). Evidence for **4-1 … 4-4** (video + email + MQTT + FPS) is under `fig/`.

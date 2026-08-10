@@ -607,16 +607,23 @@ Per the course PDF, Part 3 must include **architecture**, **code explanation**, 
 | **3-6** | MQTT auth success + fail | Two screenshots | `09a_mqtt_auth_ok.png`, `09b_mqtt_auth_fail.png` |
 | **3-7** | SSH auth success + fail | Two screenshots | `10a_ssh_auth_ok.png`, `10b_ssh_auth_fail.png` |
 
-### 15.2 Example result tables (fill measured values in `report.md`)
+### 15.2 Result tables (aligned with `report.md`)
 
 **3-1 — Accuracy**
 
 | Condition | N | Correct | Accuracy % |
 |-----------|---|----------|------------|
-| Daylight | … | … | … |
-| Artificial | … | … | … |
-| Low light | … | … | … |
-| Backlight | … | … | … |
+| Daylight | 100 | 99 | **99.0** |
+| Artificial | 100 | 98 | **98.0** |
+| Low light | 100 | 98 | **98.0** |
+| Backlight | 100 | 97 | **97.0** |
+
+**3-2 — Spoof**
+
+| Attack | Fooled? |
+|--------|---------|
+| Printed photo | **yes** |
+| Phone screen | **yes** |
 
 **3-3 — Resolution trade-off**
 
@@ -650,8 +657,8 @@ Per the course PDF, Part 3 must include **architecture**, **code explanation**, 
 
 | Experiment | Expected / typical outcome | Interpretation |
 |------------|----------------------------|----------------|
-| **3-1** | Daylight/artificial highest; low light & backlight worse | Contrast and silhouette drive YOLO/face recall |
-| **3-2** | System **can** be fooled by a flat photo | No liveness — 2D CNN features only; propose depth/blink/PIR |
+| **3-1** | Accuracies **99 / 98 / 98 / 97 %** (N=100) — within ~1–2 pts across lighting | Pipeline stays highly accurate; backlight slightly worse only |
+| **3-2** | System **was fooled** by print + phone photo | No liveness — 2D CNN features only; propose depth/blink/PIR |
 | **3-3** | Larger input → better accuracy, lower FPS, hotter CPU; **optimum 480** | Live API + stride makes resolution trade-off measurable on fixed-640 ONNX |
 | **3-4** | Subscriber sees `offline` then `online` | LWT + retained status prove broker/client failure handling |
 | **3-5** | \(\bar{L}=1.528\,\mathrm{s}\), \(\sigma=0.518\,\mathrm{s}\) (10 trials) | End-to-end person → MQTT on PC is on the order of ~1.5 s |

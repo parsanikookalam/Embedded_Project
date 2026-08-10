@@ -224,18 +224,16 @@ From Swagger you can **Try it out** on endpoints such as:
 
 The gateway does **not** re-implement detection or telemetry; it forwards to the C HTTPS API.
 
-### Demo video
-A short screen recording of the Swagger page (listing APIs and executing sample calls) is provided:
+### Demo video + still
+A short screen recording of the Swagger page (listing APIs and executing sample calls) is at:
 
 **→ Watch:** [`fig/08_swagger_api_demo.mp4`](fig/08_swagger_api_demo.mp4)
 
-*(Place the recorded file at `report/part 2/fig/08_swagger_api_demo.mp4`.)*
+**Figure — Swagger UI `/docs` (screenshot).**
 
-Optional still frame for the written PDF:
+![Figure — Swagger UI `/docs`](fig/08_swagger_api_demo.png)
 
-![Figure — Swagger UI `/docs`](fig/08_swagger_api_page.png)
-
-**Verdict:** Pass (Swagger UI + video demo of the API page).
+**Verdict:** Pass (Swagger UI + video + still of the API page).
 
 ---
 
@@ -247,7 +245,7 @@ Optional still frame for the written PDF:
 | **2-2** | C memory during 5 min stream | RSS graph + leak analysis | `03_…`, `mem_web_server.csv` | **Pass** |
 | **2-3** | 50 concurrent telemetry curls | Δ metrics + latency | `04_…`, `load_*` | **Pass** |
 | **2-4** | WSL↔Windows disconnect 2 min | Behaviour + logs + recovery | `06_…`, `07_…`, `.log`/`.txt` | **Pass** |
-| **Swagger** | OpenAPI `/docs` gateway demo | Live API page + demo video | `08_swagger_api_demo.mp4` (+ optional PNG) | **Pass** |
+| **Swagger** | OpenAPI `/docs` gateway demo | Live API page + demo video | `08_swagger_api_demo.mp4`, `08_swagger_api_demo.png` | **Pass** |
 
 ---
 
@@ -267,7 +265,7 @@ Optional still frame for the written PDF:
 | `06_network_disconnect_journal.txt` | 2-4 raw |
 | `07_network_recovery.png` | 2-4 |
 | `08_swagger_api_demo.mp4` | Swagger API page demo **video** (watch) |
-| `08_swagger_api_page.png` | Optional still of `/docs` |
+| `08_swagger_api_demo.png` | Swagger `/docs` still (PDF figure) |
 
 ---
 
@@ -284,3 +282,9 @@ Optional still frame for the written PDF:
 
 - Course PDF: *Final Project — Embedded Systems*, “Mandatory experiments of the second part”  
 - Sources: `web/src/server.c`, `web/src/telemetry.c`, `web/src/features_part4.c`, `detection/src/human_detector.py`, `gateway/main.py`, `scripts/demo_part2_network_disconnect.sh`, `scripts/sample_temp_csv.sh`
+
+---
+
+## Conclusion (Part 2)
+
+Part 2 adds **REST telemetry and control in C**, live dashboard refresh, memory-safe continuous streaming (flat RSS), load behaviour under concurrent GETs, WSL↔Windows disconnect recovery, and a **Swagger** documentation gateway (`/docs`) with demo video + still. All mandatory items **2-1 … 2-4** plus the Swagger demo are complete; plots/logs/media live under `fig/`.

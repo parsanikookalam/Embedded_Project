@@ -80,10 +80,22 @@ embedded_project/
 │   └── windows/               # usbipd camera + HostCpuTemp (keep for TAs)
 ├── data/                      # Runtime JSON / SQLite / snapshots (generated)
 └── report/                    # Course experiment reports (parts 1–4)
-    ├── part 1/report.md
-    ├── part 2/report.md
-    ├── part 3/report.md
-    └── part 4/report.md
+    ├── part 1/
+    │   ├── report.md          # Mandatory experiments 1-1 … 1-6
+    │   ├── explain.md         # Architecture & code explanation
+    │   └── fig/               # Screenshots + autostart video
+    ├── part 2/
+    │   ├── report.md          # 2-1 … 2-4 + Swagger demo
+    │   ├── explain.md
+    │   └── fig/               # CSV/plots + Swagger video
+    ├── part 3/
+    │   ├── report.md
+    │   ├── explain.md
+    │   └── fig/
+    └── part 4/
+        ├── report.md          # 4-1 … 4-4 (Guard, black box, WD, thermal)
+        ├── explain.md
+        └── fig/               # Videos + thermal/Guard evidence
 ```
 
 | Path | Role |
@@ -92,19 +104,20 @@ embedded_project/
 | `detection/` | **Python:** camera, YOLO+face, overlay, MJPEG, shared JSON/SQLite |
 | `gateway/` | Thin Swagger UI proxy → C HTTPS |
 | `services/` | `human_detector`, `web_server`, `api_gateway`, `mosquitto_smartguard` |
+| `scripts/` | Setup, SSL, Mosquitto, experiment helpers (e.g. `sample_temp_csv.sh`, `demo_part2_network_disconnect.sh`, `plot_part2_figs.py`) |
 | `scripts/windows/` | TA-facing Windows automation for webcam + CPU temp |
-| `report/` | Mandatory experiment write-ups |
+| `report/` | Per-part `report.md` + `explain.md` + `fig/` evidence |
 
 ---
 
 ## Parts overview (1–4)
 
-| Part | Weight (course) | What this repo delivers |
-|------|-----------------|-------------------------|
+| Part | Focus | What this repo delivers |
+|------|-------|-------------------------|
 | **1** | Web + HTTPS | C server, HTML dashboard, self-signed cert **CN = student ID**, HTTP→HTTPS 301, systemd autostart |
 | **2** | REST + telemetry | C APIs (`telemetry`, `persons`, `stream`, `command`, `history`), live dashboard widgets, Swagger gateway |
 | **3** | Vision + email + MQTT | YOLO+face overlay, C SMTP alerts (debounce), C MQTT QoS1 + LWT, authenticated Mosquitto |
-| **4** | Guard features | Guard alarms on count **increase**, SQLite black box, software watchdog (30 s), adaptive thermal (≥85 °C / &lt;78 °C) |
+| **4** | Guard features | Guard alarms on count **increase**, SQLite black box, software watchdog (30 s), adaptive thermal (**≥80 °C** / **&lt;78 °C**) |
 
 ---
 
@@ -227,7 +240,7 @@ Use `config.example.env` as a clean template. Important keys:
 | `YOLO_INPUT` / `DNN_CONF` / `FACE_CONF` | Detection tuning |
 | `EMAIL_*` / `SMTP_*` | Part 3 email (Gmail App Password) |
 | `MQTT_*` | Broker host/user/pass/interval |
-| `THERMAL_TEMP_C` / `THERMAL_CLEAR_C` | Default `85` / `78` |
+| `THERMAL_TEMP_C` / `THERMAL_CLEAR_C` | Default **`80`** / **`78`** |
 | `WATCHDOG_SEC` | Default `30` |
 
 **Never commit real `SMTP_PASS` to a public repo.** Prefer placeholders in the zip you give TAs.
@@ -341,9 +354,7 @@ Open `https://127.0.0.1:8443/` after accepting the certificate warning.
 | **Camera** | Manual ON/OFF only (page load does not start the cam) |
 | **Guard** | Anti-theft: count increase → email + MQTT `…/alarm` |
 | **Watchdog** | Stale frames → email + MQTT `…/watchdog` + restart detector |
-| **Thermal** | Hot CPU → throttle YOLO + email + MQTT `…/thermal` |
-| **Watchdog** | Stalled frames → tamper email + restart detector |
-| **Thermal** | Hot CPU → skip YOLO frames / mild resize; clear when cool |
+| **Thermal** | Hot CPU (**≥80 °C**) → throttle YOLO / cap FPS + email + MQTT `…/thermal`; clear when **&lt;78 °C** |
 
 Overlay on the stream shows student ID, datetime, person count, FPS, and throttle tags when active.
 
@@ -351,16 +362,14 @@ Overlay on the stream shows student ID, datetime, person count, FPS, and throttl
 
 ## Reports
 
-Course mandatory-experiment write-ups (PDF order):
+Each part folder has **`report.md`** (mandatory experiments), **`explain.md`** (architecture & code), and **`fig/`** (screenshots, CSVs, plots, videos). Videos may be large — keep the names listed in each `report.md`.
 
-| Folder | Contents |
-|--------|----------|
-| `report/part 1/` | Experiments 1-1 … 1-6 (boot, kill -9, autostart video, 301, CN cert, HTML) |
-| `report/part 2/` | 2-1 … 2-4 (temp curves, C memory, curl load, network) |
-| `report/part 3/` | 3-1 … 3-7 (lighting, spoof, resolution, LWT, latency, MQTT/SSH auth fails) |
-| `report/part 4/` | 4-1 … 4-4 (Guard, black box, watchdog, thermal) |
-
-Put screenshots/videos in each part’s `fig/` directory as named in that part’s `report.md`.
+| Folder | `report.md` / `explain.md` / `fig/` |
+|--------|-------------------------------------|
+| **`report/part 1/`** | **report:** 1-1 … 1-6 (WSL: 1-1 N/A; primary autostart proof = **`fig/03_autostart.mp4`**; kill -9, HTTP 301, CN cert, HTML). **explain:** C HTTPS server, redirect, systemd. **fig:** PNGs + autostart video. |
+| **`report/part 2/`** | **report:** 2-1 temp curves (idle/stream/detect), 2-2 C memory, 2-3 telemetry burst, 2-4 eth0 disconnect via `scripts/demo_part2_network_disconnect.sh`, plus Swagger video **`fig/08_swagger_api_demo.mp4`**. **explain:** REST/telemetry architecture. **fig:** CSVs, plots, network logs, Swagger video (may be large). Re-plot with `.venv/bin/python scripts/plot_part2_figs.py`. |
+| **`report/part 3/`** | **report:** 3-1 … 3-7 (lighting, spoof, resolution, LWT, latency, MQTT/SSH auth). **explain:** vision + email + MQTT. **fig:** screenshots / capture evidence. |
+| **`report/part 4/`** | **report:** 4-1 Guard, 4-2 black box, 4-3 watchdog, 4-4 thermal (**≥80 °C** / **&lt;78 °C**; lost FPS / `target_fps=5` when very hot). **explain:** Part 4 coordinator. **fig:** Guard/watchdog videos + thermal MQTT/email/FPS PNGs. |
 
 ---
 
@@ -380,6 +389,12 @@ curl -sk -X POST https://127.0.0.1:8443/api/v1/command \
 
 # Rebuild C after code changes
 make -C web && sudo systemctl restart web_server
+
+# Part 2 plots (after sampling CSVs into report/part 2/fig/)
+.venv/bin/python scripts/plot_part2_figs.py
+
+# Part 2-4 network disconnect demo (eth0 DOWN 120s)
+bash scripts/demo_part2_network_disconnect.sh
 ```
 
 After Windows sleep / usbipd detach, turn **Camera OFF** then **ON** (or restart `human_detector`) so VideoCapture reopens cleanly.
@@ -408,11 +423,15 @@ journalctl -u human_detector -u web_server -u api_gateway -n 80 --no-pager
 ## Before submitting to TAs
 
 1. **Scrub secrets** from `config.env` (especially `SMTP_PASS`) — use placeholders; rotate the Gmail App Password if it was ever shared.  
-2. Include **`scripts/windows/`** so TAs can attach the camera and host temp helper.  
-3. Include **`report/`** with figures/videos filled in.  
-4. Confirm cert CN: `openssl x509 -in web/www/server.crt -noout -subject` → **CN = student ID**.  
-5. Do **not** rely on committing runtime junk: `data/persons.json`, `data/vision_heartbeat.json`, etc. change while the system runs.  
-6. Smoke-test after a clean `wsl --shutdown` that systemd brings services back.
+2. Include **`scripts/windows/`** (usbipd camera + HostCpuTemp) so TAs can reproduce webcam and temperature.  
+3. Include full **`report/`** tree: each part’s `report.md`, `explain.md`, and `fig/` (PNGs, CSVs, logs, videos). Videos may be large — keep names from each `report.md` (`03_autostart.mp4`, `08_swagger_api_demo.mp4`, Guard/watchdog clips, etc.).  
+4. Confirm cert CN: `openssl x509 -in web/www/server.crt -noout -subject` → **CN = 402102657**.  
+5. Confirm thermal config: `THERMAL_TEMP_C=80`, `THERMAL_CLEAR_C=78` in `config.env`.  
+6. Rebuild/smoke: `make -C web`, services active, dashboard HTTPS, telemetry JSON, Camera ON stream.  
+7. Part 2: temp CSVs + `.venv/bin/python scripts/plot_part2_figs.py`; network demo via `bash scripts/demo_part2_network_disconnect.sh`.  
+8. Keep **your** screenshots/videos under each part’s `fig/` using the filenames listed in that part’s `report.md` (do not invent empty placeholder images).  
+9. Prefer not committing volatile runtime junk under `data/` (`persons.json`, `vision_heartbeat.json`, …) unless the course asks for a sample DB.  
+10. Smoke-test after `wsl --shutdown` that systemd brings services back (autostart video for 1-3).
 
 ---
 
