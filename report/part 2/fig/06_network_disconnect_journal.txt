@@ -1,52 +1,75 @@
-===== journal web_server / human_detector (last 5 min) =====
-Aug 10 07:08:49 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 0
-Aug 10 07:08:49 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:39922 - "GET /video_feed HTTP/1.1" 200 OK
-Aug 10 07:08:49 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 1
-Aug 10 07:08:49 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 0
-Aug 10 07:08:49 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:39926 - "GET /video_feed HTTP/1.1" 200 OK
-Aug 10 07:08:49 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 1
-Aug 10 07:08:50 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 0
-Aug 10 07:08:50 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:39932 - "GET /video_feed HTTP/1.1" 200 OK
-Aug 10 07:08:50 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 1
-Aug 10 07:08:50 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 0
-Aug 10 07:08:50 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:39948 - "GET /video_feed HTTP/1.1" 200 OK
-Aug 10 07:08:50 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 1
-Aug 10 07:08:50 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 0
-Aug 10 07:08:50 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:39964 - "GET /video_feed HTTP/1.1" 200 OK
-Aug 10 07:08:50 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 1
-Aug 10 07:08:50 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:39978 - "GET /video_feed HTTP/1.1" 200 OK
-Aug 10 07:08:50 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 2
-Aug 10 07:08:50 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 1
-Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:39980 - "GET /video_feed HTTP/1.1" 200 OK
-Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 2
-Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 1
-Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 0
-Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:39982 - "GET /video_feed HTTP/1.1" 200 OK
-Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 1
-Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 0
-Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:39996 - "GET /video_feed HTTP/1.1" 200 OK
-Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 1
-Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 0
-Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:40006 - "GET /video_feed HTTP/1.1" 200 OK
-Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 1
-Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 0
-Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:40018 - "GET /video_feed HTTP/1.1" 200 OK
-Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 1
-Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 0
-Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:40024 - "GET /video_feed HTTP/1.1" 200 OK
-Aug 10 07:08:51 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 1
-Aug 10 07:08:52 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:40026 - "GET /video_feed HTTP/1.1" 200 OK
-Aug 10 07:08:52 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 2
-Aug 10 07:08:52 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 1
-Aug 10 07:08:53 DESKTOP-R0OFT4D python[117]: [cam] ON — opening webcam (stays on until camera_off)
-Aug 10 07:09:04 DESKTOP-R0OFT4D python[117]: [cam] viewer- → 0
-Aug 10 07:09:07 DESKTOP-R0OFT4D python[117]: INFO:     127.0.0.1:41326 - "GET /video_feed HTTP/1.1" 200 OK
-Aug 10 07:09:07 DESKTOP-R0OFT4D python[117]: [cam] viewer+ → 1
-Aug 10 07:09:24 DESKTOP-R0OFT4D web_server[221]: [email] debounce[email] event send failed: Could not connect to server
-Aug 10 07:10:09 DESKTOP-R0OFT4D web_server[221]: [email] event send failed: Could not connect to server
+============================================================
+ Part 2-4 — journal evidence (stream / network disconnect)
+============================================================
+captured: 2026-08-10 08:18:29+0330
+since:    2026-08-10T08:16:06+03:30
 
-===== journal smartguard_part2_4 markers =====
-Aug 10 07:08:40 DESKTOP-R0OFT4D smartguard_part2_4[39995]: network_down iface=eth0 elapsed=0s
-Aug 10 07:09:10 DESKTOP-R0OFT4D smartguard_part2_4[40530]: network_down iface=eth0 elapsed=30s
-Aug 10 07:09:40 DESKTOP-R0OFT4D smartguard_part2_4[40822]: network_down iface=eth0 elapsed=60s
-Aug 10 07:10:10 DESKTOP-R0OFT4D smartguard_part2_4[41095]: network_down iface=eth0 elapsed=90s
+---------- A) Clear disconnect / reconnect markers ----------
+Aug 10 08:16:25 DESKTOP-R0OFT4D smartguard_part2_4[1162]: STREAM_NETWORK_DOWN iface=eth0 elapsed=0s WSL_Windows_link_lost
+Aug 10 08:16:55 DESKTOP-R0OFT4D smartguard_part2_4[1370]: STREAM_NETWORK_DOWN iface=eth0 elapsed=30s WSL_Windows_link_lost
+Aug 10 08:17:25 DESKTOP-R0OFT4D smartguard_part2_4[1527]: STREAM_NETWORK_DOWN iface=eth0 elapsed=60s WSL_Windows_link_lost
+Aug 10 08:17:55 DESKTOP-R0OFT4D smartguard_part2_4[1598]: STREAM_NETWORK_DOWN iface=eth0 elapsed=90s WSL_Windows_link_lost
+Aug 10 08:18:29 DESKTOP-R0OFT4D smartguard_part2_4[1668]: STREAM_NETWORK_UP iface=eth0 WSL_Windows_link_restored
+
+---------- B) network / stream disconnect lines ----------
+Aug 10 08:16:25 DESKTOP-R0OFT4D smartguard_part2_4[1162]: STREAM_NETWORK_DOWN iface=eth0 elapsed=0s WSL_Windows_link_lost
+Aug 10 08:16:25 DESKTOP-R0OFT4D web_server[1163]: [network] WSL uplink DOWN (eth0) elapsed=0s — remote stream clients DISCONNECT
+Aug 10 08:16:26 DESKTOP-R0OFT4D web_server[237]: [network] WSL uplink DOWN (eth0) — Windows↔WSL link lost; remote stream clients DISCONNECT
+Aug 10 08:16:55 DESKTOP-R0OFT4D smartguard_part2_4[1370]: STREAM_NETWORK_DOWN iface=eth0 elapsed=30s WSL_Windows_link_lost
+Aug 10 08:16:55 DESKTOP-R0OFT4D web_server[1371]: [network] WSL uplink DOWN (eth0) elapsed=30s — remote stream clients DISCONNECT
+Aug 10 08:16:57 DESKTOP-R0OFT4D web_server[237]: [email] event send failed: Could not connect to server
+Aug 10 08:17:25 DESKTOP-R0OFT4D smartguard_part2_4[1527]: STREAM_NETWORK_DOWN iface=eth0 elapsed=60s WSL_Windows_link_lost
+Aug 10 08:17:25 DESKTOP-R0OFT4D web_server[1528]: [network] WSL uplink DOWN (eth0) elapsed=60s — remote stream clients DISCONNECT
+Aug 10 08:17:42 DESKTOP-R0OFT4D web_server[237]: [email] event send failed: Could not connect to server
+Aug 10 08:17:55 DESKTOP-R0OFT4D smartguard_part2_4[1598]: STREAM_NETWORK_DOWN iface=eth0 elapsed=90s WSL_Windows_link_lost
+Aug 10 08:17:55 DESKTOP-R0OFT4D web_server[1599]: [network] WSL uplink DOWN (eth0) elapsed=90s — remote stream clients DISCONNECT
+Aug 10 08:18:26 DESKTOP-R0OFT4D web_server[237]: [network] WSL uplink UP (eth0) — interconnect restored; HTTPS stream available to Windows again
+Aug 10 08:18:27 DESKTOP-R0OFT4D web_server[237]: [email] event send failed: Could not connect to server
+Aug 10 08:18:29 DESKTOP-R0OFT4D smartguard_part2_4[1668]: STREAM_NETWORK_UP iface=eth0 WSL_Windows_link_restored
+Aug 10 08:18:29 DESKTOP-R0OFT4D web_server[1669]: [network] WSL uplink UP (eth0) — interconnect restored; HTTPS stream available again
+
+---------- C) web_server / human_detector (tail) ----------
+Aug 10 08:16:26 DESKTOP-R0OFT4D web_server[237]: [email] enabled → cloudeparsa@gmail.com (debounce 30s)
+Aug 10 08:16:26 DESKTOP-R0OFT4D web_server[237]: [mqtt] connected → 127.0.0.1:1883 as smartguard
+Aug 10 08:16:26 DESKTOP-R0OFT4D web_server[237]: HTTPS :8443  student=402102657 target=wsl (threaded)
+Aug 10 08:16:26 DESKTOP-R0OFT4D web_server[237]: [email] event sent: [Smart Guard] WARNING — camera tampering
+Aug 10 08:16:26 DESKTOP-R0OFT4D web_server[237]: [mqtt] WATCHDOG → home/402102657/watchdog
+Aug 10 08:16:26 DESKTOP-R0OFT4D web_server[237]: [part4] watchdog email+mqtt+restart rc=-1 age=410 mode=capturing
+Aug 10 08:16:26 DESKTOP-R0OFT4D web_server[237]: [email] alert sent to cloudeparsa@gmail.com (count=1 temp=78.8)
+Aug 10 08:16:26 DESKTOP-R0OFT4D web_server[237]: [camera] ON
+Aug 10 08:16:26 DESKTOP-R0OFT4D web_server[237]: [camera] OFF
+Aug 10 08:16:26 DESKTOP-R0OFT4D web_server[237]: [camera] ON
+Aug 10 08:16:26 DESKTOP-R0OFT4D web_server[237]: [email] debounce: next allowed in 4 s
+Aug 10 08:16:26 DESKTOP-R0OFT4D web_server[237]: [email] debounce: next allowed in 2 s
+Aug 10 08:16:26 DESKTOP-R0OFT4D web_server[237]: [email] alert sent to cloudeparsa@gmail.com (count=1 temp=67.8)
+Aug 10 08:16:26 DESKTOP-R0OFT4D web_server[237]: [network] WSL uplink DOWN (eth0) — Windows↔WSL link lost; remote stream clients DISCONNECT
+Aug 10 08:16:36 DESKTOP-R0OFT4D python[151]: [ WARN:20@60.572] global cap_v4l.cpp:1049 tryIoctl VIDEOIO(V4L2:/dev/video0): select() timeout.
+Aug 10 08:16:36 DESKTOP-R0OFT4D python[151]: [cam] read failed (1/8) — heartbeat not refreshed
+Aug 10 08:16:46 DESKTOP-R0OFT4D python[151]: [ WARN:20@70.834] global cap_v4l.cpp:1049 tryIoctl VIDEOIO(V4L2:/dev/video0): select() timeout.
+Aug 10 08:16:46 DESKTOP-R0OFT4D python[151]: [cam] read failed (2/8) — heartbeat not refreshed
+Aug 10 08:16:56 DESKTOP-R0OFT4D python[151]: [ WARN:20@81.098] global cap_v4l.cpp:1049 tryIoctl VIDEOIO(V4L2:/dev/video0): select() timeout.
+Aug 10 08:16:56 DESKTOP-R0OFT4D python[151]: [cam] read failed (3/8) — heartbeat not refreshed
+Aug 10 08:16:57 DESKTOP-R0OFT4D web_server[237]: [email] event send failed: Could not connect to server
+Aug 10 08:17:06 DESKTOP-R0OFT4D python[151]: [ WARN:20@91.363] global cap_v4l.cpp:1049 tryIoctl VIDEOIO(V4L2:/dev/video0): select() timeout.
+Aug 10 08:17:06 DESKTOP-R0OFT4D python[151]: [cam] read failed (4/8) — heartbeat not refreshed
+Aug 10 08:17:17 DESKTOP-R0OFT4D python[151]: [ WARN:20@101.627] global cap_v4l.cpp:1049 tryIoctl VIDEOIO(V4L2:/dev/video0): select() timeout.
+Aug 10 08:17:17 DESKTOP-R0OFT4D python[151]: [cam] read failed (5/8) — heartbeat not refreshed
+Aug 10 08:17:27 DESKTOP-R0OFT4D python[151]: [ WARN:20@111.890] global cap_v4l.cpp:1049 tryIoctl VIDEOIO(V4L2:/dev/video0): select() timeout.
+Aug 10 08:17:27 DESKTOP-R0OFT4D python[151]: [cam] read failed (6/8) — heartbeat not refreshed
+Aug 10 08:17:37 DESKTOP-R0OFT4D python[151]: [ WARN:20@122.153] global cap_v4l.cpp:1049 tryIoctl VIDEOIO(V4L2:/dev/video0): select() timeout.
+Aug 10 08:17:37 DESKTOP-R0OFT4D python[151]: [cam] read failed (7/8) — heartbeat not refreshed
+Aug 10 08:17:42 DESKTOP-R0OFT4D web_server[237]: [email] event send failed: Could not connect to server
+Aug 10 08:17:47 DESKTOP-R0OFT4D python[151]: [ WARN:20@132.415] global cap_v4l.cpp:1049 tryIoctl VIDEOIO(V4L2:/dev/video0): select() timeout.
+Aug 10 08:17:47 DESKTOP-R0OFT4D python[151]: [cam] read failed (8/8) — heartbeat not refreshed
+Aug 10 08:17:47 DESKTOP-R0OFT4D python[151]: [cam] recycling VideoCapture (usbipd reattach path)
+Aug 10 08:18:26 DESKTOP-R0OFT4D web_server[237]: [mqtt] WATCHDOG → home/402102657/watchdog
+Aug 10 08:18:26 DESKTOP-R0OFT4D web_server[237]: [part4] watchdog email+mqtt+restart rc=256 age=31 mode=capturing
+Aug 10 08:18:26 DESKTOP-R0OFT4D web_server[237]: [mqtt] WATCHDOG → home/402102657/watchdog
+Aug 10 08:18:26 DESKTOP-R0OFT4D web_server[237]: [part4] watchdog email+mqtt+restart rc=256 age=76 mode=capturing
+Aug 10 08:18:26 DESKTOP-R0OFT4D web_server[237]: [network] WSL uplink UP (eth0) — interconnect restored; HTTPS stream available to Windows again
+Aug 10 08:18:27 DESKTOP-R0OFT4D web_server[237]: [email] event send failed: Could not connect to server
+
+============================================================
+ Screenshot this file for Figure 2-4a (journal evidence).
+ Also screenshot YOUR real dashboard after reconnect → fig/07
+============================================================

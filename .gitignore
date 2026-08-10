@@ -21,5 +21,12 @@ mqtt/mosquitto.conf
 # TLS private key
 web/www/server.key
 
+# Large media (GitHub rejects files >100MB) — keep videos local / submit separately
+*.mp4
+*.mov
+*.avi
+*.mkv
+report/**/*.mp4
+
 # Local secrets (keep example template)
 # config.env   # uncomment if you do not want secrets in zip for TAs

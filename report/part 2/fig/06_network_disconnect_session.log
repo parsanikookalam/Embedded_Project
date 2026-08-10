@@ -1,44 +1,57 @@
-===== Part 2-4 WSL↔Windows disconnect demo =====
-start: 2026-08-10 07:08:04+0330
-iface: eth0
-wait:  120s
+============================================================
+ Part 2-4 — WSL <-> Windows network disconnect / reconnect
+============================================================
+start:     2026-08-10 08:16:06+0330
+iface:     eth0
+down_for:  120s
+session:   /home/parsa/embedded_project/report/part 2/fig/06_network_disconnect_session.log
+journal:   /home/parsa/embedded_project/report/part 2/fig/06_network_disconnect_journal.txt
 
--- interfaces BEFORE --
+---------- BEFORE (link UP) ----------
 lo               UNKNOWN        127.0.0.1/8 10.255.255.254/32 ::1/128 
-eth0             UP             172.23.219.59/20 fe80::215:5dff:fe0f:1f1b/64 
+eth0             UP             172.23.219.59/20 fe80::215:5dff:fe0f:19af/64 
 
--- ping Windows host (gateway) BEFORE --
 gateway: 172.23.208.1
+ping gateway BEFORE:
 PING 172.23.208.1 (172.23.208.1) 56(84) bytes of data.
 
 --- 172.23.208.1 ping statistics ---
-2 packets transmitted, 0 received, 100% packet loss, time 1021ms
+2 packets transmitted, 0 received, 100% packet loss, time 1031ms
 
 
+local telemetry BEFORE:
+{"cpu_temp": 68.85, "free_mem_kb": 5818228, "mem_used_percent": 26.65, "cpu_usage_percent": 8.52}
 
-== DISCONNECT at 2026-08-10 07:08:32+0330 ==
+---------- DISCONNECT ----------
+time:    2026-08-10 08:16:21+0330
 command: sudo ip link set eth0 down
-link state after down:
-eth0             DOWN           00:15:5d:0f:1f:1b <BROADCAST,MULTICAST> 
+link after down:
+eth0             DOWN           00:15:5d:0f:19:af <BROADCAST,MULTICAST> 
+operstate: down
 
-Local loopback check (should still work inside WSL):
-{"cpu_temp": 56.85, "free_mem_kb": 6601904, "mem_used_percent": 16.77, "cpu_usage_percent": 0.78}
-Sleeping 120s — Windows browser should lose / freeze the stream...
-[down +0s] 2026-08-10 07:08:40+0330 still disconnected
-[down +30s] 2026-08-10 07:09:10+0330 still disconnected
-[down +60s] 2026-08-10 07:09:40+0330 still disconnected
-[down +90s] 2026-08-10 07:10:10+0330 still disconnected
+local loopback during outage (should still work inside WSL):
+{"cpu_temp": 63.85, "free_mem_kb": 5834480, "mem_used_percent": 26.45, "cpu_usage_percent": 3.45}
+NOTE: Windows browser stream should freeze / fail while eth0 is DOWN.
 
-== RECONNECT at 2026-08-10 07:10:40+0330 ==
+[DOWN +0s] 2026-08-10 08:16:25+0330  iface=eth0 still disconnected
+[DOWN +30s] 2026-08-10 08:16:55+0330  iface=eth0 still disconnected
+[DOWN +60s] 2026-08-10 08:17:25+0330  iface=eth0 still disconnected
+[DOWN +90s] 2026-08-10 08:17:55+0330  iface=eth0 still disconnected
+
+---------- RECONNECT ----------
+time:    2026-08-10 08:18:25+0330
 command: sudo ip link set eth0 up
-
--- interfaces AFTER --
+link after up:
 lo               UNKNOWN        127.0.0.1/8 10.255.255.254/32 ::1/128 
-eth0             UP             172.23.219.59/20 fe80::215:5dff:fe0f:1f1b/64 
+eth0             UP             172.23.219.59/20 fe80::215:5dff:fe0f:19af/64 
+operstate: up
 
--- ping gateway AFTER --
 gateway: none
 
-Local telemetry after reconnect:
-{"cpu_temp": 54.85, "free_mem_kb": 6613860, "mem_used_percent": 16.62, "cpu_usage_percent": 1.57}
-end: 2026-08-10 07:10:44+0330
+local telemetry AFTER reconnect:
+{"cpu_temp": 58.85, "free_mem_kb": 5903448, "mem_used_percent": 25.58, "cpu_usage_percent": 0.81}
+end: 2026-08-10 08:18:29+0330
+============================================================
+ RESULT: eth0 was DOWN ~120s then restored.
+ Screenshot this file for Figure 2-4a (session evidence).
+============================================================

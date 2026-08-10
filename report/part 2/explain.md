@@ -359,24 +359,30 @@ This split keeps **writers in Python** (vision cadence) and **readers in C** (AP
 
 ## 7. FastAPI / Swagger gateway (`gateway/main.py`)
 
-### 7.1 Why it exists
+### 7.1 Why a gateway?
 
 The PDF allows Python for Swagger. The gateway:
 
 - Serves OpenAPI docs at `http://127.0.0.1:8000/docs`  
-- Proxies each documented route to `https://127.0.0.1:8443/...`  
+- Proxies REST calls to the C HTTPS server (`https://127.0.0.1:8443`)  
 - Uses **local** Swagger static files so `/docs` works offline  
+- Does **not** own telemetry/detection logic (C remains the source of truth)
 
-It must **not** compute telemetry or detection itself.
+### 7.2 Demo for the report
 
-### 7.2 Proxy helpers
+Part 2 report includes a short section on this page plus a **screen-recording video**:
+
+- **Watch:** `report/part 2/fig/08_swagger_api_demo.mp4`  
+- Show: open `/docs`, expand endpoints, **Try it out** on `telemetry` / `persons` / `command`
+
+### 7.3 Proxy helpers
 
 | Helper | Role |
 |--------|------|
 | `_proxy_json` | httpx GET/POST to C with `verify=False` (self-signed) |
 | `_c_command_http10` | Tiny raw **HTTP/1.0** TLS client for `POST /command` |
 
-### 7.3 Source: HTTP/1.0 command helper (`gateway/main.py`)
+### 7.4 Source: HTTP/1.0 command helper (`gateway/main.py`)
 
 ```python
 def _c_command_http10(cmd: str) -> Tuple[int, bytes, str]:
@@ -398,7 +404,7 @@ def _c_command_http10(cmd: str) -> Tuple[int, bytes, str]:
             # … read response …
 ```
 
-### 7.4 Why HTTP/1.0 for commands?
+### 7.5 Why HTTP/1.0 for commands?
 
 Some HTTP/2 or httpx write patterns split headers and body across TLS records. Early C code that did a single `SSL_read` then reported `missing_cmd`.  
 
@@ -407,7 +413,7 @@ Fix (two sides):
 1. C: `ssl_read_http_request()` loops until `Content-Length` satisfied.  
 2. Gateway: send a classic HTTP/1.0 request in **one** `sendall` for commands.
 
-### 7.5 systemd
+### 7.6 systemd
 
 `api_gateway.service` runs the module directly (uvicorn is started from `if __name__ == "__main__"` in `gateway/main.py`):
 
@@ -542,47 +548,47 @@ Per the course PDF, Part 2 must include **architecture**, **code explanation**, 
 
 | No. | Experiment (PDF) | Required tables / charts | Files in `fig/` |
 |-----|------------------|--------------------------|-----------------|
-| **2-1** | Temp idle / stream / stream+detect (30 s, 5 min) | **3-curve** temp-vs-time graph; **max-temp table**; final detection screenshot | `01_temp_vs_time.png`, `02_detect_final_state.png` (+ CSV optional) |
+| **2-1** | Temp idle / stream / stream+detect (30 s, 5 min) | **3-curve** temp-vs-time graph; **max-temp table**; final detection screenshot | `01_temp_vs_time.png`, `02_detect_final_state.png` (+ CSV) |
 | **2-2** | C memory during 5 min stream (every 5 s) | Memory-vs-time graph; leak analysis | `03_mem_vs_time.png`, `mem_web_server.csv` |
-| **2-3** | 50 concurrent curls to `/api/v1/telemetry` | Tables: Δ temp/CPU/mem; latency mean/max/increase | `04_telemetry_latency.png`, `05_load_test_terminal.png` |
-| **2-4** | Network disconnect 2 min during stream | Behaviour write-up + log screenshots + recovery | `06_network_disconnect_logs.png`, `07_network_recovery.png` |
+| **2-3** | 50 concurrent curls to `/api/v1/telemetry` | Tables: Δ temp/CPU/mem; latency mean/max/increase | `04_telemetry_latency.png`, `load_*.json/txt` |
+| **2-4** | Network disconnect 2 min during stream | Behaviour + logs + recovery | `06_network_disconnect_logs.png`, `07_network_recovery.png`, session `.log` + journal `.txt` |
+| **Swagger** | OpenAPI docs via gateway | Short explanation + **demo video** of `/docs` | `08_swagger_api_demo.mp4`, optional `08_swagger_api_page.png` |
 
-### 16.2 Example result tables (fill with measured values in `report.md`)
+### 16.2 Measured result tables (see also `report.md`)
 
 **2-1 — Max temperature (°C)**
 
 | State | Max temp (°C) |
 |-------|----------------|
-| (a) Idle | *(from CSV / graph)* |
-| (b) Stream only | *(…)* |
-| (c) Stream + detection | *(…)* |
+| (a) Idle | **57.85** |
+| (b) Stream only | **61.85** |
+| (c) Stream + detection | **64.85** |
 
 **2-2 — Memory (RSS of `web_server`)**
 
 | Metric | Value |
 |--------|--------|
-| Initial RSS (KB) | … |
-| Final / peak RSS (KB) | … |
-| Leak? | Yes / No + one-sentence justification |
+| Initial / final / peak RSS (KB) | **17512 / 17512 / 17512** |
+| Leak? | **No** — flat RSS for full 5‑minute window |
 
 **2-3 — Load vs baseline**
 
 | Metric | Before | After burst | Δ |
 |--------|--------|-------------|---|
-| `cpu_temp` | … | … | … |
-| `cpu_usage_percent` | … | … | … |
-| Latency mean (s) | … | … | … |
+| `cpu_temp` | 58.85 | 58.85 | 0.00 |
+| `cpu_usage_percent` | 2.68 | 4.84 | +2.16 |
+| Latency mean (s) | — | 0.0290 | ~+9 ms vs min |
 
 ---
 
 ## 17. Results analysis (Part 2)
 
-| Experiment | What the data should show | Interpretation |
-|------------|---------------------------|----------------|
-| **2-1** | Idle ≤ stream ≤ stream+detect (typically) | Detection (YOLO) raises CPU heat; stream alone is lighter than full detect |
-| **2-2** | RSS flat after warmup | Threaded MJPEG proxy without unbounded buffers → **no leak** in 5 min window if plot is flat |
-| **2-3** | Latency and CPU rise under 50-way TLS GETs | pthread-per-connection + OpenSSL cost; service must stay correct (200 JSON), not crash |
-| **2-4** | `eth0` down 120 s: loopback telemetry OK; SMTP fails; markers in journal; eth0 up recovers | WSL↔Windows link loss ≠ process death; recovery = NIC up + client refresh |
+| Experiment | What the data showed | Interpretation |
+|------------|----------------------|----------------|
+| **2-1** | Max temps idle **57.85** &lt; stream **61.85** &lt; detect **64.85** °C | Stream adds some load; continuous YOLO/face raises CPU heat further |
+| **2-2** | RSS constant **17512 KB** | Threaded MJPEG proxy without unbounded buffers → **no leak** in 5 min |
+| **2-3** | CPU +2.16%; latency mean ~29 ms (max ~42 ms); temp flat | Contended TLS/accept path; service stayed correct (JSON 200) |
+| **2-4** | `eth0` down 120 s: loopback telemetry OK; journal `STREAM_NETWORK_DOWN` + `[network] … DISCONNECT`; eth0 up restores | WSL↔Windows link loss ≠ process death; recovery = NIC up + client refresh |
 
 ---
 
@@ -590,12 +596,33 @@ Per the course PDF, Part 2 must include **architecture**, **code explanation**, 
 
 | # | Problem | Severity | Cause | Solution |
 |---|---------|----------|-------|----------|
-| 1 | Swagger `POST /command` → `missing_cmd` | High | httpx/TLS split body across records; early single `SSL_read` | C: `ssl_read_http_request()` loops until `Content-Length` complete; Gateway: raw **HTTP/1.0** `sendall` helper |
-| 2 | CPU temperature −1 / wrong on WSL | High | No real sysfs package temp in WSL | Windows **HostCpuTemp** file + `telemetry.c` cache/helper (`host_cpu_temp.sh`) |
-| 3 | Stream 502 `detector_not_running` | Medium | Detector down or port mismatch | Ensure `human_detector` active; `STREAM_HOST/PORT` match `:5000` |
-| 4 | Concurrent load spikes latency | Expected | Many TLS handshakes | Documented in exp 2-3; threading keeps server alive |
-| 5 | Wi-Fi off does not kill localhost stream | Expected (exp 2-4) | Bind is `127.0.0.1` (loopback ≠ uplink) | Documented as correct behaviour: local stream stays up while Wi-Fi is off |
-| 6 | Confusing system RAM vs C RSS | Medium | PDF asks for C program memory | Sample `/proc/<pid>/status` **VmRSS** of `web_server`, not only `/api/v1/telemetry` mem_% |
+| 1 | Swagger `POST /command` → `missing_cmd` | High | httpx/TLS split body; early single `SSL_read` | C: `ssl_read_http_request()` until `Content-Length` complete; Gateway: raw HTTP/1.0 `sendall` helper |
+| 2 | CPU temperature −1 / wrong on WSL | High | No reliable sysfs package temp in WSL | Windows **HostCpuTemp** file + `telemetry.c` helper (`host_cpu_temp.sh`) |
+| 3 | Stream 502 `detector_not_running` | Medium | Detector down or port mismatch | Keep `human_detector` active; `STREAM_HOST/PORT` → `:5000` |
+| 4 | Concurrent load spikes latency | Expected | Many TLS handshakes | Documented in 2-3; threading keeps server alive |
+| 5 | Confusing system RAM vs C RSS | Medium | PDF asks for **C program** memory | Sample `/proc/<pid>/status` **VmRSS** of `web_server`, not only telemetry `mem_%` |
+| 6 | Turning **Windows Wi‑Fi OFF** did not show a real outage | High (2-4) | Loopback / localhost forwarding still reaches WSL | TA: disconnect **WSL↔Windows** link (`ip link set eth0 down`), not only Wi‑Fi |
+| 7 | Journal had no clear “stream disconnected” line | High (2-4) | TCP hang; no uplink-aware log | Added `[network] uplink DOWN/UP` in `features_part4.c`, `[stream] … DISCONNECTED` in `server.c` / detector; demo script writes screenshot-ready `.log` + `.txt` |
+| 8 | Plot script failed with system `python3` | Medium (2-1) | Matplotlib only in project venv | Use `.venv/bin/python scripts/plot_part2_figs.py` |
+| 9 | Temperature CSVs empty / one curve only | Medium (2-1) | Sampler not run for all three states | `scripts/sample_temp_csv.sh idle\|stream\|detect` then re-plot |
+| 10 | Demo evidence hard to screenshot from noisy `journalctl` | Low (2-4) | Long mixed unit logs | `demo_part2_network_disconnect.sh` writes focused `06_network_disconnect_session.log` + `06_network_disconnect_journal.txt` |
+
+### 18.1 Focus — Experiment 2-4 debugging (detail)
+
+1. **Wrong disconnect method**  
+   Wi‑Fi OFF left `https://127.0.0.1:8443` working, so the experiment looked like a no-op.  
+   **Fix:** follow TA guidance — bring **`eth0` down** inside WSL (`scripts/demo_part2_network_disconnect.sh`).
+
+2. **Missing journal evidence for stream loss**  
+   Services stayed `active` (correct), but logs did not state that remote stream clients disconnect.  
+   **Fix:** uplink monitor + stream proxy disconnect messages; also `logger` markers `STREAM_NETWORK_DOWN` / `UP` every 30 s while down.
+
+3. **Evidence packaging**  
+   Students need a short artifact to screenshot.  
+   **Fix:** each run refreshes:
+   - `report/part 2/fig/06_network_disconnect_session.log`
+   - `report/part 2/fig/06_network_disconnect_journal.txt`  
+   Student attaches PNG screenshots of those files + real browser recovery as `06_…png` / `07_…png`.
 
 ---
 
@@ -605,11 +632,12 @@ Part 2 turns the Part 1 HTTPS appliance into a **telemetry- and control-capable 
 
 | Layer | Responsibility |
 |-------|----------------|
-| C (`server.c`, `telemetry.c`, `persons_state.c`) | Measurement, JSON APIs, stream proxy, commands |
+| C (`server.c`, `telemetry.c`, `persons_state.c`, `features_part4.c`) | Measurement, JSON APIs, stream proxy, commands, uplink/stream disconnect logs |
 | Shared files / SQLite | Bridge from vision (writer) to API (reader) |
 | FastAPI gateway | OpenAPI docs + transparent proxy only |
+| Scripts | Temp sampling, Part 2 plots (venv), WSL↔Windows disconnect demo |
 
-This separation matches the course rule: **core logic in C**; Python is limited to allowed roles (later vision + thin API documentation).
+All mandatory experiments **2-1 … 2-4** were executed with measured tables, charts, and log evidence. Core rule held: **logic in C**; Python limited to vision + thin docs/helpers.
 
 ---
 
@@ -617,7 +645,7 @@ This separation matches the course rule: **core logic in C**; Python is limited 
 
 | Document | Role |
 |----------|------|
-| `report/part 2/report.md` | Mandatory experiments 2-1 … 2-4 |
-| `report/part 2/explain.md` | This file — architecture & code |
+| `report/part 2/report.md` | Mandatory experiments 2-1 … 2-4 (final) |
+| `report/part 2/explain.md` | This file — architecture, code, analysis, problems |
 | `report/part 1/explain.md` | HTTPS server foundation |
 | `README.md` (repo root) | Full-project setup guide |

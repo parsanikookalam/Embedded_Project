@@ -1,25 +1,27 @@
 #!/usr/bin/env bash
 # Part 2-4 — Disconnect WSL ↔ Windows link for ~2 minutes, then reconnect.
-# TA meaning: break the virtual NIC between WSL and Windows (not only Wi‑Fi).
 #
-# Usage (inside WSL):
+# Saves screenshot-ready text (open these and screenshot the window):
+#   report/part 2/fig/06_network_disconnect_session.log
+#   report/part 2/fig/06_network_disconnect_journal.txt
+#
+# Usage:
+#   cd ~/embedded_project
+#   make -C web && sudo systemctl restart web_server human_detector
+#   # open stream from Windows browser first
 #   bash scripts/demo_part2_network_disconnect.sh
-#
-# Before running:
-#   1) web_server + human_detector active
-#   2) Camera ON, open the live stream from *Windows* browser
-#      (https://127.0.0.1:8443/ or https://<WSL-IP>:8443/)
-#   3) Leave that browser tab open
-#
-# During DOWN (~2 min): Windows→WSL stream/API should stall or fail.
-# After UP: stream recovers; capture journal + this script's log for fig/06.
+#   # then screenshot the two files:
+#   less -S "report/part 2/fig/06_network_disconnect_session.log"
+#   less -S "report/part 2/fig/06_network_disconnect_journal.txt"
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FIG="$ROOT/report/part 2/fig"
 mkdir -p "$FIG"
 LOG="$FIG/06_network_disconnect_session.log"
+JTXT="$FIG/06_network_disconnect_journal.txt"
 WAIT_SEC="${WAIT_SEC:-120}"
+SINCE_FILE="$FIG/.part24_since"
 
 IFACE="${IFACE:-}"
 if [[ -z "$IFACE" ]]; then
@@ -37,49 +39,71 @@ fi
 
 ts() { date '+%Y-%m-%d %H:%M:%S%z'; }
 
+# Fresh files every run (easy to screenshot from start)
+: >"$LOG"
+date -Iseconds >"$SINCE_FILE"
+SINCE="$(cat "$SINCE_FILE")"
+
+append_log() { tee -a "$LOG"; }
+
 {
-  echo "===== Part 2-4 WSL↔Windows disconnect demo ====="
-  echo "start: $(ts)"
-  echo "iface: $IFACE"
-  echo "wait:  ${WAIT_SEC}s"
+  echo "============================================================"
+  echo " Part 2-4 — WSL <-> Windows network disconnect / reconnect"
+  echo "============================================================"
+  echo "start:     $(ts)"
+  echo "iface:     $IFACE"
+  echo "down_for:  ${WAIT_SEC}s"
+  echo "session:   $LOG"
+  echo "journal:   $JTXT"
   echo
-  echo "-- interfaces BEFORE --"
+  echo "---------- BEFORE (link UP) ----------"
   ip -br addr || true
   echo
-  echo "-- ping Windows host (gateway) BEFORE --"
   GW="$(ip route show default 2>/dev/null | awk '{print $3; exit}')"
   echo "gateway: ${GW:-none}"
-  if [[ -n "${GW:-}" ]]; then ping -c 2 -W 2 "$GW" 2>&1 || true; fi
+  if [[ -n "${GW:-}" ]]; then
+    echo "ping gateway BEFORE:"
+    ping -c 2 -W 2 "$GW" 2>&1 || true
+  fi
   echo
-} | tee "$LOG"
+  echo "local telemetry BEFORE:"
+  curl -sk --max-time 3 https://127.0.0.1:8443/api/v1/telemetry || echo "(curl failed)"
+  echo
+} | append_log
 
 echo
-echo ">>> Open/confirm stream from WINDOWS browser now."
-echo ">>> Press Enter to disconnect $IFACE (WSL↔Windows link)..."
+echo ">>> Open the live stream from the WINDOWS browser now."
+echo ">>> Press Enter to disconnect $IFACE ..."
 read -r _
 
 {
   echo
-  echo "== DISCONNECT at $(ts) =="
+  echo "---------- DISCONNECT ----------"
+  echo "time:    $(ts)"
   echo "command: sudo ip link set $IFACE down"
-} | tee -a "$LOG"
+} | append_log
 
 sudo ip link set "$IFACE" down
 
 {
-  echo "link state after down:"
+  echo "link after down:"
   ip -br link show "$IFACE" || true
+  echo "operstate: $(cat /sys/class/net/$IFACE/operstate 2>/dev/null || echo unknown)"
   echo
-  echo "Local loopback check (should still work inside WSL):"
-  curl -sk --max-time 3 https://127.0.0.1:8443/api/v1/telemetry | head -c 200 || echo "(curl failed)"
+  echo "local loopback during outage (should still work inside WSL):"
+  curl -sk --max-time 3 https://127.0.0.1:8443/api/v1/telemetry || echo "(curl failed)"
   echo
-  echo "Sleeping ${WAIT_SEC}s — Windows browser should lose / freeze the stream..."
-} | tee -a "$LOG"
+  echo "NOTE: Windows browser stream should freeze / fail while $IFACE is DOWN."
+  echo
+} | append_log
 
 elapsed=0
 while [[ "$elapsed" -lt "$WAIT_SEC" ]]; do
-  echo "[down +${elapsed}s] $(ts) still disconnected" | tee -a "$LOG"
-  logger -t smartguard_part2_4 "network_down iface=$IFACE elapsed=${elapsed}s" || true
+  {
+    echo "[DOWN +${elapsed}s] $(ts)  iface=$IFACE still disconnected"
+  } | append_log
+  logger -t smartguard_part2_4 "STREAM_NETWORK_DOWN iface=$IFACE elapsed=${elapsed}s WSL_Windows_link_lost" || true
+  logger -t web_server "[network] WSL uplink DOWN ($IFACE) elapsed=${elapsed}s — remote stream clients DISCONNECT" || true
   step=30
   if [[ $((elapsed + step)) -gt "$WAIT_SEC" ]]; then
     step=$((WAIT_SEC - elapsed))
@@ -90,47 +114,77 @@ done
 
 {
   echo
-  echo "== RECONNECT at $(ts) =="
+  echo "---------- RECONNECT ----------"
+  echo "time:    $(ts)"
   echo "command: sudo ip link set $IFACE up"
-} | tee -a "$LOG"
+} | append_log
 
 sudo ip link set "$IFACE" up
 sleep 2
 if ! ip -4 addr show "$IFACE" | grep -q 'inet '; then
-  sudo dhclient -v "$IFACE" 2>&1 | tee -a "$LOG" || true
+  sudo dhclient -v "$IFACE" 2>&1 | append_log || true
 fi
 sleep 2
+logger -t smartguard_part2_4 "STREAM_NETWORK_UP iface=$IFACE WSL_Windows_link_restored" || true
+logger -t web_server "[network] WSL uplink UP ($IFACE) — interconnect restored; HTTPS stream available again" || true
 
 {
-  echo
-  echo "-- interfaces AFTER --"
+  echo "link after up:"
   ip -br addr || true
+  echo "operstate: $(cat /sys/class/net/$IFACE/operstate 2>/dev/null || echo unknown)"
   echo
-  echo "-- ping gateway AFTER --"
   GW="$(ip route show default 2>/dev/null | awk '{print $3; exit}')"
   echo "gateway: ${GW:-none}"
-  if [[ -n "${GW:-}" ]]; then ping -c 2 -W 2 "$GW" 2>&1 || true; fi
+  if [[ -n "${GW:-}" ]]; then
+    echo "ping gateway AFTER:"
+    ping -c 2 -W 2 "$GW" 2>&1 || true
+  fi
   echo
-  echo "Local telemetry after reconnect:"
-  curl -sk --max-time 5 https://127.0.0.1:8443/api/v1/telemetry | head -c 300 || true
+  echo "local telemetry AFTER reconnect:"
+  curl -sk --max-time 5 https://127.0.0.1:8443/api/v1/telemetry || echo "(curl failed)"
   echo
   echo "end: $(ts)"
-} | tee -a "$LOG"
+  echo "============================================================"
+  echo " RESULT: $IFACE was DOWN ~${WAIT_SEC}s then restored."
+  echo " Screenshot this file for Figure 2-4a (session evidence)."
+  echo "============================================================"
+} | append_log
 
-JTXT="$FIG/06_network_disconnect_journal.txt"
+# ----- journal file (screenshot-ready, focused) -----
 {
-  echo "===== journal web_server / human_detector (last 5 min) ====="
-  journalctl -u web_server -u human_detector --since "5 min ago" --no-pager || true
+  echo "============================================================"
+  echo " Part 2-4 — journal evidence (stream / network disconnect)"
+  echo "============================================================"
+  echo "captured: $(ts)"
+  echo "since:    $SINCE"
   echo
-  echo "===== journal smartguard_part2_4 markers ====="
-  journalctl -t smartguard_part2_4 --since "5 min ago" --no-pager || true
-} | tee "$JTXT"
+  echo "---------- A) Clear disconnect / reconnect markers ----------"
+  journalctl -t smartguard_part2_4 --since "$SINCE" --no-pager 2>/dev/null || true
+  echo
+  echo "---------- B) network / stream disconnect lines ----------"
+  journalctl --since "$SINCE" --no-pager 2>/dev/null \
+    | grep -E 'smartguard_part2_4|\[network\]|\[stream\]|DISCONNECT|STREAM_NETWORK|uplink|Could not connect' \
+    || echo "(no grep hits — see section A)"
+  echo
+  echo "---------- C) web_server / human_detector (tail) ----------"
+  journalctl -u web_server -u human_detector --since "$SINCE" --no-pager 2>/dev/null | tail -n 80 || true
+  echo
+  echo "============================================================"
+  echo " Screenshot this file for Figure 2-4a (journal evidence)."
+  echo " Also screenshot YOUR real dashboard after reconnect → fig/07"
+  echo "============================================================"
+} >"$JTXT"
 
 echo
-echo "===== Done ====="
-echo "Session log: $LOG"
-echo "Journal dump: $JTXT"
-echo
-echo "Screenshots:"
-echo "  fig/06_network_disconnect_logs.png  ← terminal with this log / journalctl"
-echo "  fig/07_network_recovery.png         ← Windows browser stream after reconnect"
+echo "################################################################"
+echo "# Saved for screenshot:"
+echo "#   $LOG"
+echo "#   $JTXT"
+echo "#"
+echo "# Open and screenshot:"
+echo "#   less -S \"$LOG\""
+echo "#   less -S \"$JTXT\""
+echo "# Save PNGs as:"
+echo "#   report/part 2/fig/06_network_disconnect_logs.png"
+echo "#   report/part 2/fig/07_network_recovery.png  (your browser)"
+echo "################################################################"

@@ -31,6 +31,52 @@ static float g_thermal_off = 78.0f;
 static int g_watchdog_sec = 30;
 static char g_student_id[64] = "402102657";
 
+/* Part 2-4: watch WSL uplink so journal shows stream impact when link drops. */
+static int uplink_is_up(char *iface_out, size_t iface_sz)
+{
+    char iface[64] = "eth0";
+    FILE *r = fopen("/proc/net/route", "r");
+    if (r) {
+        char line[256], ifn[64];
+        unsigned long dest = 1;
+        if (fgets(line, sizeof(line), r)) {
+            while (fgets(line, sizeof(line), r)) {
+                if (sscanf(line, "%63s %lx", ifn, &dest) == 2 && dest == 0UL) {
+                    snprintf(iface, sizeof(iface), "%s", ifn);
+                    break;
+                }
+            }
+        }
+        fclose(r);
+    }
+
+    char path[160];
+    snprintf(path, sizeof(path), "/sys/class/net/%s/operstate", iface);
+    FILE *f = fopen(path, "r");
+    if (!f) {
+        /* Default route gone while iface still exists (common during eth0 down). */
+        snprintf(path, sizeof(path), "/sys/class/net/eth0/operstate");
+        f = fopen(path, "r");
+        snprintf(iface, sizeof(iface), "%s", "eth0");
+    }
+    if (!f)
+        return -1;
+    char st[32] = {0};
+    if (!fgets(st, sizeof(st), f)) {
+        fclose(f);
+        return -1;
+    }
+    fclose(f);
+    if (iface_out && iface_sz)
+        snprintf(iface_out, iface_sz, "%s", iface);
+    /* operstate: up | down | unknown | lowerlayerdown | ... */
+    if (!strncmp(st, "up", 2))
+        return 1;
+    if (strstr(st, "down") != NULL)
+        return 0;
+    return 1;
+}
+
 static void trim_crlf(char *s)
 {
     size_t n = strlen(s);
@@ -152,6 +198,7 @@ static void *part4_thread(void *arg)
     write_thermal_control(0, 0);
     printf("[part4] guard/watchdog/thermal coordinator up (thermal>=%.0fC wd=%ds)\n",
            g_thermal_on, g_watchdog_sec);
+    fflush(stdout);
 
     while (1) {
         PersonSnapshot snap;
@@ -162,9 +209,28 @@ static void *part4_thread(void *arg)
         long hb_ts = 0;
         char mode[32] = {0};
         static int ticks = 0;
+        static int prev_uplink = 1;
+        char uplink_iface[64];
+        int uplink;
 
         if ((ticks++ % 60) == 0)
             load_part4_cfg();
+
+        /* Part 2-4 evidence: log WSL↔Windows link loss in journalctl -u web_server */
+        uplink = uplink_is_up(uplink_iface, sizeof(uplink_iface));
+        if (uplink == 0 && prev_uplink != 0) {
+            printf("[network] WSL uplink DOWN (%s) — Windows↔WSL link lost; "
+                   "remote stream clients DISCONNECT\n",
+                   uplink_iface[0] ? uplink_iface : "eth0");
+            fflush(stdout);
+        } else if (uplink == 1 && prev_uplink == 0) {
+            printf("[network] WSL uplink UP (%s) — interconnect restored; "
+                   "HTTPS stream available to Windows again\n",
+                   uplink_iface[0] ? uplink_iface : "eth0");
+            fflush(stdout);
+        }
+        if (uplink >= 0)
+            prev_uplink = uplink;
 
         if (read_persons_snapshot(&snap) == 0)
             count = snap.count;

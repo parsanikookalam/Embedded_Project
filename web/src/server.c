@@ -241,17 +241,24 @@ static void handle_stream_proxy(SSL *ssl) {
         return;
     }
 
+    fprintf(stderr, "[stream] HTTPS client connected — proxying MJPEG /api/v1/stream\n");
+    fflush(stderr);
+
     char buf[BUFFER_SIZE];
     ssize_t n;
     int headers_sent = 0;
     char header_acc[2048];
     size_t header_len = 0;
+    int client_gone = 0;
 
     while ((n = read(upstream, buf, sizeof(buf))) > 0) {
         if (!headers_sent) {
             if (header_len + (size_t)n >= sizeof(header_acc)) {
-                SSL_write(ssl, header_acc, (int)header_len);
-                SSL_write(ssl, buf, (int)n);
+                if (SSL_write(ssl, header_acc, (int)header_len) <= 0 ||
+                    SSL_write(ssl, buf, (int)n) <= 0) {
+                    client_gone = 1;
+                    break;
+                }
                 headers_sent = 1;
                 continue;
             }
@@ -271,17 +278,33 @@ static void handle_stream_proxy(SSL *ssl) {
                               "Connection: close\r\n"
                               "Access-Control-Allow-Origin: *\r\n"
                               "\r\n");
-            SSL_write(ssl, out_hdr, hn);
+            if (SSL_write(ssl, out_hdr, hn) <= 0) {
+                client_gone = 1;
+                break;
+            }
 
             size_t body_off = raw_hdr + 4;
-            if (body_off < header_len)
-                SSL_write(ssl, header_acc + body_off, (int)(header_len - body_off));
+            if (body_off < header_len) {
+                if (SSL_write(ssl, header_acc + body_off, (int)(header_len - body_off)) <= 0) {
+                    client_gone = 1;
+                    break;
+                }
+            }
             headers_sent = 1;
         } else if (SSL_write(ssl, buf, (int)n) <= 0) {
+            client_gone = 1;
             break;
         }
     }
     close(upstream);
+    if (client_gone) {
+        fprintf(stderr,
+                "[stream] HTTPS client DISCONNECTED — stream session ended "
+                "(browser closed or WSL↔Windows/network link lost)\n");
+    } else {
+        fprintf(stderr, "[stream] HTTPS stream proxy ended (upstream closed)\n");
+    }
+    fflush(stderr);
 }
 
 static void handle_command(SSL *ssl, const char *req) {

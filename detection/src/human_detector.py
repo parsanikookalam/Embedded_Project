@@ -618,7 +618,7 @@ def add_viewer() -> int:
         viewers += 1
         n = viewers
         last_chunk_sent_at = time.time()  # start grace so camera can open immediately
-    print(f"[cam] viewer+ → {n}")
+    print(f"[stream] MJPEG client CONNECTED; active_viewers={n}", flush=True)
     return n
 
 
@@ -627,7 +627,11 @@ def remove_viewer() -> int:
     with viewers_lock:
         viewers = max(0, viewers - 1)
         n = viewers
-    print(f"[cam] viewer- → {n}")
+    print(
+        f"[stream] MJPEG client DISCONNECTED (browser closed or link lost); "
+        f"active_viewers={n}",
+        flush=True,
+    )
     return n
 
 
@@ -920,6 +924,11 @@ async def mjpeg_generator(request: Request) -> AsyncIterator[bytes]:
     try:
         while True:
             if await request.is_disconnected():
+                print(
+                    "[stream] /video_feed client disconnect detected "
+                    "(TCP/TLS closed — often after WSL↔Windows link loss)",
+                    flush=True,
+                )
                 break
             with frame_lock:
                 frame = None if output_frame is None else output_frame.copy()
