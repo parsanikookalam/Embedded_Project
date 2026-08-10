@@ -2,12 +2,13 @@
 
 | Field | Value |
 |-------|--------|
-| Document | Final architecture & code explanation |
-| Companion | `report/part 4/report.md` (mandatory experiments) |
+| Document | **Final** architecture & code explanation (submission) |
+| Status | Complete — aligned with `report/part 4/report.md` |
+| Companion | `report/part 4/report.md` (mandatory experiments 4-1 … 4-4) |
 | Also covers | PDF package: architecture, code, experiment videos/images, results analysis, problems & solutions |
 | Project | Smart Guard System |
 | Student | Parsa Nikookalam · `402102657` |
-| Scope | Guard, black box, software watchdog, adaptive thermal (C coordinator) |
+| Scope | Guard, black box, software watchdog, adaptive thermal (C coordinator; enter **≥80 °C**, clear **&lt;78 °C**) |
 
 Part 4 is a **policy coordinator** on top of Parts 1–3. It does not replace the web server or detector; it applies Guard / watchdog / thermal / recording rules on the same shared files and APIs.
 
@@ -662,11 +663,11 @@ Part 4 implements four appliance behaviours in one C coordinator thread (`featur
 | Feature | Behaviour |
 |---------|-----------|
 | **Guard** | Person-count **increase** → fast email + MQTT `home/<ID>/alarm` |
-| **Black box** | Circular SQLite history (capacity 500) via `/api/v1/blackbox` |
+| **Black box** | Circular SQLite history (capacity 500); e.g. `total_human_events=132`, `stored=47` |
 | **Watchdog** | Stale non-idle heartbeat → tamper email + `systemctl restart human_detector` |
-| **Thermal** | ≥80 °C throttle / &lt;78 °C clear via `thermal_control.json` (YOLO skip, `target_fps=5` at level 2; stream stays live) |
+| **Thermal** | ≥80 °C throttle / &lt;78 °C clear via `thermal_control.json`; level 2 → **`target_fps=5`**; stream stays live |
 
-Together with Parts 1–3, this completes the Smart Guard System as specified in the course PDF.
+Experiments **4-1 … 4-4** are complete with video/image/MQTT/email/FPS evidence under `fig/`. Together with Parts 1–3, this completes the Smart Guard System as specified in the course PDF.
 
 ---
 
@@ -674,7 +675,7 @@ Together with Parts 1–3, this completes the Smart Guard System as specified in
 
 | Document | Role |
 |----------|------|
-| `report/part 4/report.md` | Mandatory experiments 4-1 … 4-4 |
-| `report/part 4/explain.md` | This file — architecture & code |
+| `report/part 4/report.md` | Mandatory experiments 4-1 … 4-4 (**final**) |
+| `report/part 4/explain.md` | This file — architecture & code (**final**) |
 | `report/part 3/explain.md` | Vision / email / MQTT substrate |
 | `README.md` (repo root) | Full-project setup guide |

@@ -2,8 +2,9 @@
 
 | Field | Value |
 |-------|--------|
-| Document | Final architecture & code explanation |
-| Companion | `report/part 1/report.md` (mandatory experiments) |
+| Document | **Final** architecture & code explanation (submission) |
+| Status | Complete — aligned with `report/part 1/report.md` |
+| Companion | `report/part 1/report.md` (mandatory experiments 1-1 … 1-6) |
 | Also covers | PDF package: architecture, code, experiment tables/figures, results analysis, problems & solutions |
 | Project | Smart Guard System |
 | Student | Parsa Nikookalam · `402102657` |
@@ -644,9 +645,12 @@ Part 1 delivers a **minimal embedded HTTPS appliance** in C:
 | Property | Implementation |
 |----------|----------------|
 | Dual listeners | HTTP **301** redirect + OpenSSL HTTPS |
-| Identity | Self-signed certificate, **CN = student ID** |
+| Identity | Self-signed certificate, **CN = 402102657** |
 | UI | `www/index.html` served on `GET /` |
-| Persistence | `web_server.service` with `Restart=always` |
+| Resilience | `Restart=always` after `kill -9` (exp 1-2) |
+| Persistence | `web_server.service` enable-on-boot; WSL autostart proven in exp **1-3** video |
+
+**1-1** is **N/A on WSL** (boot too short for a board-style `systemd-analyze blame` table); autostart evidence is redirected to **1-3**. Experiments **1-2 … 1-6** are complete with media under `fig/`.
 
 All later Smart Guard features run inside this same process and certificate boundary.
 
@@ -656,6 +660,6 @@ All later Smart Guard features run inside this same process and certificate boun
 
 | Document | Role |
 |----------|------|
-| `report/part 1/report.md` | Mandatory experiments 1-1 … 1-6 |
-| `report/part 1/explain.md` | This file — architecture & code |
+| `report/part 1/report.md` | Mandatory experiments 1-1 … 1-6 (**final**) |
+| `report/part 1/explain.md` | This file — architecture & code (**final**) |
 | `README.md` (repo root) | Full-project setup guide |

@@ -2,12 +2,13 @@
 
 | Field | Value |
 |-------|--------|
-| Document | Final architecture & code explanation |
-| Companion | `report/part 3/report.md` (mandatory experiments) |
+| Document | **Final** architecture & code explanation (submission) |
+| Status | Complete — aligned with `report/part 3/report.md` |
+| Companion | `report/part 3/report.md` (mandatory experiments 3-1 … 3-7) |
 | Also covers | PDF package: architecture, code, experiment tables/images, results analysis, problems & solutions |
 | Project | Smart Guard System |
 | Student | Parsa Nikookalam · `402102657` |
-| Scope | Detection (Python), overlay, email (C), MQTT (C), Mosquitto auth/LWT |
+| Scope | Detection (Python), overlay, email (C), MQTT (C), Mosquitto auth/LWT, SSH demo |
 
 Part 3 turns Smart Guard into a sensing appliance. Vision stays in Python; **email and MQTT are implemented in C** to satisfy the course language rule.
 
@@ -678,7 +679,9 @@ Per the course PDF, Part 3 must include **architecture**, **code explanation**, 
 | 5 | Double-counting face+body | Medium | Two detectors | `merge_unique_persons`: face inside body = one person |
 | 6 | Email not sending | Medium | Wrong App Password / spaces in `SMTP_PASS` / `EMAIL_ENABLED=0` | Gmail App Password; no spaces; restart `web_server`; `test_email` cmd |
 | 7 | MQTT silent / LWT not seen | Medium | Broker down or wrong user | `setup_mosquitto.sh`; subscribe before stopping broker; check `allow_anonymous false` |
-| 8 | Stream freeze when “thermal sleep” tried | High (later Part 4) | Sleeping capture loop | Skip YOLO frames instead (`detect_every`) — kept here because detector loop owns it |
+| 8 | Stream freeze when “thermal sleep” tried | High (later Part 4) | Sleeping capture loop | Skip YOLO frames instead (`detect_every`) — detector loop owns it |
+| 9 | Lower UI resolution barely changed FPS | Medium (3-3) | ONNX fixed 640×640 after letterbox | Add preprocess shrink + **detect stride** so 320/256/160 run YOLO less often |
+| 10 | Spoof accepted (print / phone) | Expected (3-2) | No liveness model | Document fooled=yes; propose blink/depth/PIR mitigations |
 
 ---
 
@@ -688,9 +691,11 @@ Part 3 splits responsibilities as follows:
 
 | Layer | Language | Responsibility |
 |-------|----------|----------------|
-| Sense + draw | Python | Camera, YOLO/face, MJPEG, files/DB |
+| Sense + draw | Python | Camera, YOLO/face, MJPEG, files/DB, dynamic resolution/FPS |
 | Decide + notify | C | Email (libcurl), MQTT (libmosquitto), REST façade |
-| Broker | Mosquitto | Authenticated transport + LWT on `…/status` |
+| Broker | Mosquitto | Authenticated transport + LWT on `home/<ID>/status` |
+
+**Experiment highlights (see `report.md`):** lighting accuracy **97–99%**; spoof **succeeded** (system fooled); resolution optimum **480**; MQTT latency \(\bar L = 1.528\,\mathrm{s}\); MQTT/SSH auth fail demos pass.
 
 This meets both the **vision** requirements and the rule that outbound application alerts are implemented in **C**.
 
@@ -700,7 +705,7 @@ This meets both the **vision** requirements and the rule that outbound applicati
 
 | Document | Role |
 |----------|------|
-| `report/part 3/report.md` | Mandatory experiments 3-1 … 3-7 |
-| `report/part 3/explain.md` | This file — architecture & code |
+| `report/part 3/report.md` | Mandatory experiments 3-1 … 3-7 (**final**) |
+| `report/part 3/explain.md` | This file — architecture & code (**final**) |
 | `report/part 2/explain.md` | REST / telemetry substrate |
 | `README.md` (repo root) | Full-project setup guide |

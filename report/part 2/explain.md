@@ -2,8 +2,9 @@
 
 | Field | Value |
 |-------|--------|
-| Document | Final architecture & code explanation |
-| Companion | `report/part 2/report.md` (mandatory experiments) |
+| Document | **Final** architecture & code explanation (submission) |
+| Status | Complete — aligned with `report/part 2/report.md` |
+| Companion | `report/part 2/report.md` (mandatory experiments 2-1 … 2-4 + Swagger) |
 | Also covers | PDF package: architecture, code, experiment tables/charts, results analysis, problems & solutions |
 | Project | Smart Guard System |
 | Student | Parsa Nikookalam · `402102657` |
@@ -590,6 +591,7 @@ Per the course PDF, Part 2 must include **architecture**, **code explanation**, 
 | **2-2** | RSS constant **17512 KB** | Threaded MJPEG proxy without unbounded buffers → **no leak** in 5 min |
 | **2-3** | CPU +2.16%; latency mean ~29 ms (max ~42 ms); temp flat | Contended TLS/accept path; service stayed correct (JSON 200) |
 | **2-4** | `eth0` down 120 s: loopback telemetry OK; journal `STREAM_NETWORK_DOWN` + `[network] … DISCONNECT`; eth0 up restores | WSL↔Windows link loss ≠ process death; recovery = NIC up + client refresh |
+| **Swagger** | `/docs` lists C APIs; demo video + still executed Try-it-out flows | Gateway is docs-only; business logic remains in C |
 
 ---
 
@@ -619,11 +621,11 @@ Per the course PDF, Part 2 must include **architecture**, **code explanation**, 
    **Fix:** uplink monitor + stream proxy disconnect messages; also `logger` markers `STREAM_NETWORK_DOWN` / `UP` every 30 s while down.
 
 3. **Evidence packaging**  
-   Students need a short artifact to screenshot.  
-   **Fix:** each run refreshes:
+   Long mixed `journalctl` output is hard to screenshot.  
+   **Fix:** each demo run refreshes focused text evidence:
    - `report/part 2/fig/06_network_disconnect_session.log`
    - `report/part 2/fig/06_network_disconnect_journal.txt`  
-   Screenshot / export those files as `06_network_disconnect_logs.png` and browser recovery as `07_network_recovery.png`.
+   Plus figures `06_network_disconnect_logs.png` and `07_network_recovery.png`.
 
 ---
 
@@ -633,12 +635,14 @@ Part 2 turns the Part 1 HTTPS appliance into a **telemetry- and control-capable 
 
 | Layer | Responsibility |
 |-------|----------------|
-| C (`server.c`, `telemetry.c`, `persons_state.c`, `features_part4.c`) | Measurement, JSON APIs, stream proxy, commands, uplink/stream disconnect logs |
+| C (`server.c`, `telemetry.c`, `persons_state.c`) | Measurement, JSON APIs, stream proxy, commands, uplink/stream disconnect logs |
 | Shared files / SQLite | Bridge from vision (writer) to API (reader) |
-| FastAPI gateway | OpenAPI docs + transparent proxy only |
-| Scripts | Temp sampling, Part 2 plots (venv), WSL↔Windows disconnect demo |
+| FastAPI gateway | OpenAPI `/docs` + transparent proxy only (`08_swagger_api_demo.mp4` + `.png`) |
+| Scripts | Temp sampling, Part 2 plots (`.venv`), WSL↔Windows disconnect demo |
 
-All mandatory experiments **2-1 … 2-4** were executed with measured tables, charts, and log evidence. Core rule held: **logic in C**; Python limited to vision + thin docs/helpers.
+**Measured highlights:** detect state hottest (**64.85 °C**); RSS **flat 17512 KB** (no leak); burst latency mean **~29 ms**; eth0 down **120 s** with clear journal disconnect markers. Core rule held: **logic in C**; Python limited to vision + thin docs/helpers.
+
+All mandatory experiments **2-1 … 2-4** and the Swagger demo are complete.
 
 ---
 
