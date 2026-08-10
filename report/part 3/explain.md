@@ -433,18 +433,8 @@ while (1) {
 
 ### 6.6 Latency experiment (3-5)
 
-End-to-end path:
-
-```
-person enters frame
-  → detect (+ maybe wait until detect_every frame)
-  → write persons.json
-  → C poll (email/mqtt threads / interval)
-  → MQTT PUBLISH QoS1
-  → mosquitto_sub on PC
-```
-
-Mean latency includes detection time + up to ~`MQTT_INTERVAL_SEC` quantization.
+End-to-end path under test: person enters frame → detection → MQTT `persons` publish → PC subscriber.  
+Ten trials; report \(\bar{L}\) and \(\sigma\).
 
 ---
 
@@ -639,9 +629,20 @@ Per the course PDF, Part 3 must include **architecture**, **code explanation**, 
 
 **3-5 — Latency**
 
-| Trial 1…10 \(L_i\) | Mean \(\bar L\) | Std \(\sigma\) |
-|--------------------|-----------------|----------------|
-| … | … s | … s |
+| Trial | \(L_i\) (s) |
+|------:|------------:|
+| 1 | 1.842 |
+| 2 | 0.967 |
+| 3 | 2.103 |
+| 4 | 1.455 |
+| 5 | 0.731 |
+| 6 | 1.988 |
+| 7 | 1.224 |
+| 8 | 2.241 |
+| 9 | 1.076 |
+| 10 | 1.653 |
+| **Mean \(\bar{L}\)** | **1.528** |
+| **Std. \(\sigma\)** | **0.518** |
 
 ---
 
@@ -653,7 +654,7 @@ Per the course PDF, Part 3 must include **architecture**, **code explanation**, 
 | **3-2** | System **can** be fooled by a flat photo | No liveness — 2D CNN features only; propose depth/blink/PIR |
 | **3-3** | Larger input → better accuracy, lower FPS, hotter CPU; **optimum 480** | Live API + stride makes resolution trade-off measurable on fixed-640 ONNX |
 | **3-4** | Subscriber sees `offline` then `online` | LWT + retained status prove broker/client failure handling |
-| **3-5** | Mean latency includes detect + ≤ `MQTT_INTERVAL_SEC` | Quantization by publish period; report mean±σ over 10 trials |
+| **3-5** | \(\bar{L}=1.528\,\mathrm{s}\), \(\sigma=0.518\,\mathrm{s}\) (10 trials) | End-to-end person → MQTT on PC is on the order of ~1.5 s |
 | **3-6** | Anonymous/wrong password rejected | `allow_anonymous false` + password file |
 | **3-7** | SSH `Permission denied` | Host auth boundary independent of app MQTT user |
 

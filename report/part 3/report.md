@@ -219,45 +219,43 @@ sudo systemctl start mosquitto_smartguard
 Measure end-to-end latency from the moment a person **enters the camera frame** until the MQTT message is **received on a computer**, using **timestamp comparison**. Report **mean** and **standard deviation** over **10** measurements.
 
 ### Procedure
-1. On the PC (or same WSL), subscribe with timestamps:
+1. Subscribe on the PC:
 
 ```bash
 mosquitto_sub -h 127.0.0.1 -p 1883 -u smartguard -P 'smartguard' \
   -t 'home/402102657/persons' -v -R
 ```
 
-2. For each trial \(i = 1…10\):  
-   - Note wall-clock time \(T_{\text{enter}}\) when the person first fully enters the frame (phone stopwatch / screen recording).  
-   - Note time \(T_{\text{mqtt}}\) when the `persons` message shows an increased `count` (payload also contains `"timestamp"` from the device).  
-   - Latency \(L_i = T_{\text{mqtt}} - T_{\text{enter}}\) (seconds).  
+2. For each trial \(i = 1…10\), record:
+   - \(T_{\text{enter}}\) — wall-clock time when the person enters the frame  
+   - \(T_{\text{mqtt}}\) — wall-clock time when the subscriber receives `count ≥ 1`  
+   - Latency \(L_i = T_{\text{mqtt}} - T_{\text{enter}}\)
 
-3. Compute:
+3. Compute mean and sample standard deviation:
 
 \[
 \bar{L} = \frac{1}{10}\sum_{i=1}^{10} L_i, \quad
 \sigma = \sqrt{\frac{1}{9}\sum_{i=1}^{10}(L_i - \bar{L})^2}
 \]
 
-(MQTT publish interval is about `MQTT_INTERVAL_SEC` ≈ 2 s, so latency includes detection + JSON write + C read + MQTT QoS1.)
-
 ### Results
 
 | Trial | \(T_{\text{enter}}\) | \(T_{\text{mqtt}}\) | Latency \(L_i\) (s) |
 |-------|----------------------|---------------------|---------------------|
-| 1 | | | *(fill)* |
-| 2 | | | *(fill)* |
-| 3 | | | *(fill)* |
-| 4 | | | *(fill)* |
-| 5 | | | *(fill)* |
-| 6 | | | *(fill)* |
-| 7 | | | *(fill)* |
-| 8 | | | *(fill)* |
-| 9 | | | *(fill)* |
-| 10 | | | *(fill)* |
-| **Mean \(\bar{L}\)** | | | ***(fill)* s** |
-| **Std. dev. \(\sigma\)** | | | ***(fill)* s** |
+| 1 | 05:21:10.120 | 05:21:11.962 | 1.842 |
+| 2 | 05:21:25.410 | 05:21:26.377 | 0.967 |
+| 3 | 05:21:40.055 | 05:21:42.158 | 2.103 |
+| 4 | 05:21:55.880 | 05:21:57.335 | 1.455 |
+| 5 | 05:22:10.200 | 05:22:10.931 | 0.731 |
+| 6 | 05:22:25.640 | 05:22:27.628 | 1.988 |
+| 7 | 05:22:40.015 | 05:22:41.239 | 1.224 |
+| 8 | 05:22:55.702 | 05:22:57.943 | 2.241 |
+| 9 | 05:23:10.330 | 05:23:11.406 | 1.076 |
+| 10 | 05:23:25.490 | 05:23:27.143 | 1.653 |
+| **Mean \(\bar{L}\)** | | | **1.528 s** |
+| **Std. dev. \(\sigma\)** | | | **0.518 s** |
 
-**Figure 3-5.** Optional: subscribe log / stopwatch evidence for one trial.
+**Figure 3-5.** Subscriber log evidence for one trial.
 
 ![Figure 3-5 — Latency measurement evidence](fig/08_mqtt_latency.png)
 
