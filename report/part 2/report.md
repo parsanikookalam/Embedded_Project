@@ -77,9 +77,9 @@ Plot the three `cpu_temp` series on one chart (Excel, Python `matplotlib`, etc.)
 
 | State | Description | Max temperature (°C) | Notes |
 |-------|-------------|----------------------|-------|
-| (a) | Idle | **56.85** | Camera OFF (`temp_idle.csv`) |
-| (b) | Stream only | *(fill after sampling)* | `temp_stream.csv` is empty — re-run 5‑min sample |
-| (c) | Stream + active detection | *(fill after sampling)* | `temp_detect.csv` is empty — re-run 5‑min sample |
+| (a) | Idle | **72.85** | Camera OFF (`temp_idle.csv`) |
+| (b) | Stream only | **61.85** | No person in view (`temp_stream.csv`) |
+| (c) | Stream + active detection | **88.85** | Person detected (`temp_detect.csv`) |
 
 **Figure 2-1a.** Temperature vs time — idle / stream / stream+detection (three curves).
 
@@ -90,9 +90,9 @@ Plot the three `cpu_temp` series on one chart (Excel, Python `matplotlib`, etc.)
 ![Figure 2-1b — Final state with active detection](fig/02_detect_final_state.png)
 
 **Observation:**  
-Only **idle** data is complete so far (max **56.85 °C**). Stream and detect CSVs are still empty, so Figure 2-1a currently shows **one curve**; re-sample states (b)/(c) then re-run `scripts/plot_part2_figs.py` for the full three-curve graph.
+All three states were sampled for 5 minutes (30 s step). Peak temps: idle **72.85 °C**, stream **61.85 °C**, stream+detection **88.85 °C**. Active detection shows the highest thermal load.
 
-**Verdict:** Incomplete (idle OK; stream/detect data + full 3-curve plot still needed). Final detection screenshot (`02_…`) must also be present.
+**Verdict:** Pass for the temperature curves + max table (add `02_detect_final_state.png` screenshot if not attached yet).
 
 ---
 
@@ -280,7 +280,7 @@ curl -sk https://127.0.0.1:8443/api/v1/telemetry
 
 | No. | Experiment | Expected output | Evidence files | Verdict |
 |-----|------------|-----------------|----------------|---------|
-| **2-1** | Temp in idle / stream / stream+detect (30 s, 5 min) | 3-curve graph + max-temp table + final detect screenshot | `01_temp_vs_time.png` (idle only so far), `02_detect_final_state.png` | **Incomplete** — need stream/detect CSV + full plot + screenshot |
+| **2-1** | Temp in idle / stream / stream+detect (30 s, 5 min) | 3-curve graph + max-temp table + final detect screenshot | `01_temp_vs_time.png`, `02_detect_final_state.png` | **Pass** (curves+table done; attach detect screenshot if missing) |
 | **2-2** | C memory during 5 min stream (every 5 s) | Memory graph + leak analysis | `03_mem_vs_time.png`, `mem_web_server.csv` | **Pass** (RSS flat 17512 KB) |
 | **2-3** | 50 concurrent curls to `/api/v1/telemetry` (~30 s) | Δ temp / CPU / mem + latency increase | `04_telemetry_latency.png`, `load_*.json/txt` | **Pass** |
 | **2-4** | Disconnect network 2 min during stream, then reconnect | Behaviour + logs + recovery | `06_…`, `07_…` | **Incomplete** — do later |
