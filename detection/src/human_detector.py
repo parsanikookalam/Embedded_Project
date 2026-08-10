@@ -779,6 +779,9 @@ def detect_humans() -> None:
             if thr_lvl > 0:
                 yolo_in = snap_yolo_input(int(thermal.get("yolo_input") or yolo_in))
                 detect_every = max(detect_every, int(thermal.get("detect_every") or 1))
+                thr_fps = int(thermal.get("target_fps") or 0)
+                if thr_fps > 0:
+                    target_fps = float(min(target_fps, thr_fps))
 
             global _last_logged_vision
             vkey = (yolo_in, int(target_fps), detect_every, thr_lvl)

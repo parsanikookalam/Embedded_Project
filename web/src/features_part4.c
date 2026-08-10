@@ -26,7 +26,7 @@
 #define HEARTBEAT_PATH "../data/vision_heartbeat.json"
 #define THERMAL_CTRL_PATH "../data/thermal_control.json"
 
-static float g_thermal_on = 85.0f;
+static float g_thermal_on = 80.0f;
 static float g_thermal_off = 78.0f;
 static int g_watchdog_sec = 30;
 static char g_student_id[64] = "402102657";
@@ -75,23 +75,26 @@ static void load_part4_cfg(void)
 
 static void write_thermal_control(int level, float temp)
 {
-    /* Smooth stream: never sleep the pipeline. Cut YOLO frequency / mild size only. */
+    /* Cut YOLO work and hard-cap stream FPS when hot (level 2 → ~5 FPS). */
     int yolo = 640;
     int detect_every = 1;
+    int target_fps = 0; /* 0 = do not override vision FPS */
     if (level >= 2) {
-        yolo = 416; /* keep readable; 320 froze WSL too hard */
-        detect_every = 3;
+        yolo = 416;
+        detect_every = 4;
+        target_fps = 5;
     } else if (level == 1) {
         yolo = 640;
         detect_every = 2;
+        target_fps = 12;
     }
     FILE *fp = fopen(THERMAL_CTRL_PATH ".tmp", "w");
     if (!fp)
         return;
     fprintf(fp,
             "{\"throttle_level\":%d,\"cpu_temp\":%.2f,\"yolo_input\":%d,"
-            "\"detect_every\":%d,\"frame_sleep_ms\":0}\n",
-            level, temp, yolo, detect_every);
+            "\"detect_every\":%d,\"target_fps\":%d,\"frame_sleep_ms\":0}\n",
+            level, temp, yolo, detect_every, target_fps);
     fclose(fp);
     if (rename(THERMAL_CTRL_PATH ".tmp", THERMAL_CTRL_PATH) != 0) {
         fp = fopen(THERMAL_CTRL_PATH, "w");
@@ -99,8 +102,8 @@ static void write_thermal_control(int level, float temp)
             return;
         fprintf(fp,
                 "{\"throttle_level\":%d,\"cpu_temp\":%.2f,\"yolo_input\":%d,"
-                "\"detect_every\":%d,\"frame_sleep_ms\":0}\n",
-                level, temp, yolo, detect_every);
+                "\"detect_every\":%d,\"target_fps\":%d,\"frame_sleep_ms\":0}\n",
+                level, temp, yolo, detect_every, target_fps);
         fclose(fp);
     }
 }
@@ -237,7 +240,7 @@ static void *part4_thread(void *arg)
                     char body[512];
                     snprintf(body, sizeof(body),
                              "Adaptive thermal management\nCPU temp=%.2f C (threshold %.0f C).\n"
-                             "Throttle level=%d — run YOLO every N frames (stream stays live).\n"
+                             "Throttle level=%d — lower detect rate; FPS capped when very hot.\n"
                              "MQTT topic: home/%s/thermal (publishes every second while hot)\n",
                              temp, g_thermal_on, throttle_level, g_student_id);
                     email_send_event("[Smart Guard] Thermal throttle active", body, 0);
